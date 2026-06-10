@@ -1,0 +1,36 @@
+# Secrets — never commit
+secrets/
+*.env
+!*.env.example
+*.p8
+*.pem
+Secrets.xcconfig
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl.backup
+crash.log
+
+# Go build artifacts
+bootstrap
+*.zip
+backend/bin/
+
+# macOS
+.DS_Store
+
+# Xcode / iOS
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Tooling scratch
+.firecrawl/
