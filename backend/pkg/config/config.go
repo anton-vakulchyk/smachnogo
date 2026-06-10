@@ -29,6 +29,7 @@ type Config struct {
 	LLMModelText    string
 	LLMVisionPolicy string
 	AnthropicAPIKey string // resolved from SSM when SSMPrefix set, else env
+	GeminiAPIKey    string // same resolution rule
 
 	SSMPrefix string // e.g. /smachnogo/dev — when set, secrets+kill switch read from SSM
 
@@ -58,11 +59,10 @@ func Load() (*Config, error) {
 		StaticBearerToken: os.Getenv("STATIC_BEARER_TOKEN"),
 		StaticUserID:      getenv("STATIC_USER_ID", "8a2fb1f4-3c5e-4b9a-9d27-6e1f0c4a7b53"),
 
-		LLMProvider:     getenv("LLM_PROVIDER", "anthropic"),
-		LLMModelVision:  getenv("LLM_MODEL_VISION", "claude-opus-4-8"),
-		LLMModelText:    getenv("LLM_MODEL_TEXT", "claude-haiku-4-5"),
+		LLMProvider:     getenv("LLM_PROVIDER", "gemini"),
 		LLMVisionPolicy: getenv("LLM_VISION_POLICY", "single"),
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
+		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
 
 		SSMPrefix: os.Getenv("SSM_PREFIX"),
 
@@ -77,6 +77,16 @@ func Load() (*Config, error) {
 		ScanResultTTL: 30 * 24 * time.Hour,
 	}
 
+	// Model defaults are provider-aware; env overrides win.
+	switch c.LLMProvider {
+	case "gemini":
+		c.LLMModelVision = getenv("LLM_MODEL_VISION", "gemini-3-flash-preview")
+		c.LLMModelText = getenv("LLM_MODEL_TEXT", "gemini-3.1-flash-lite")
+	default:
+		c.LLMModelVision = getenv("LLM_MODEL_VISION", "claude-opus-4-8")
+		c.LLMModelText = getenv("LLM_MODEL_TEXT", "claude-haiku-4-5")
+	}
+
 	// STATIC_BEARER_TOKEN may also arrive via SSM after Load (deployed mode);
 	// the API entrypoint validates it post-resolution.
 	if c.Bucket == "" {
@@ -88,6 +98,23 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("QUEUE_URL is required for the api unless LOCAL_SYNC=1")
 	}
 	return c, nil
+}
+
+// LLMKey returns the configured provider's API key (post-SSM-resolution).
+func (c *Config) LLMKey() string {
+	if c.LLMProvider == "gemini" {
+		return c.GeminiAPIKey
+	}
+	return c.AnthropicAPIKey
+}
+
+// SetLLMKey stores an SSM-resolved key for the configured provider.
+func (c *Config) SetLLMKey(key string) {
+	if c.LLMProvider == "gemini" {
+		c.GeminiAPIKey = key
+		return
+	}
+	c.AnthropicAPIKey = key
 }
 
 func getenv(k, def string) string {

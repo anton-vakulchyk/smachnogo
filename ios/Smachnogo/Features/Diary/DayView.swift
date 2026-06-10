@@ -32,9 +32,13 @@ struct DayView: View {
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Image(systemName: "photo.on.rectangle")
                     }
+                    .accessibilityLabel("Scan from photo library")
+                    .accessibilityIdentifier("scan.library")
                     Button { openCamera() } label: {
                         Image(systemName: "camera")
                     }
+                    .accessibilityLabel("Scan with camera")
+                    .accessibilityIdentifier("scan.camera")
                 }
             }
             .refreshable { await load() }

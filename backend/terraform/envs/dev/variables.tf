@@ -8,11 +8,14 @@ variable "region" {
   default = "us-east-1"
 }
 
-# Worker reserved concurrency = the global Claude-call ceiling and cost
-# circuit-breaker. Keep small.
+# Worker reserved concurrency = the global LLM-call ceiling and cost
+# circuit-breaker. -1 = unreserved: this NEW account's total Lambda
+# concurrency limit is 10 (an even stricter global ceiling) and AWS forbids
+# reservations that leave <10 unreserved. Set back to 3-5 after a Service
+# Quotas increase on "Concurrent executions".
 variable "worker_reserved_concurrency" {
   type    = number
-  default = 3
+  default = -1
 }
 
 variable "daily_scan_cap" {
@@ -25,12 +28,18 @@ variable "daily_estimate_cap" {
   default = 20
 }
 
+variable "llm_provider" {
+  type    = string
+  default = "gemini"
+}
+
+# gemini-3.1-pro-preview once the Google billing tier allows it (one var flip).
 variable "llm_model_vision" {
   type    = string
-  default = "claude-opus-4-8"
+  default = "gemini-3-flash-preview"
 }
 
 variable "llm_model_text" {
   type    = string
-  default = "claude-haiku-4-5"
+  default = "gemini-3.1-flash-lite"
 }

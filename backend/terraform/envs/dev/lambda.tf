@@ -9,7 +9,7 @@ locals {
     BUCKET             = aws_s3_bucket.photos.bucket
     QUEUE_URL          = aws_sqs_queue.scans.url
     SSM_PREFIX         = "/${local.prefix}/${var.env}"
-    LLM_PROVIDER       = "anthropic"
+    LLM_PROVIDER       = var.llm_provider
     LLM_MODEL_VISION   = var.llm_model_vision
     LLM_MODEL_TEXT     = var.llm_model_text
     DAILY_SCAN_CAP     = tostring(var.daily_scan_cap)

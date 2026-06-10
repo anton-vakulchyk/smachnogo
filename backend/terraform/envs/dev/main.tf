@@ -7,7 +7,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "smachnogo-tfstate-912442530845"
+    bucket         = "smachnogo-tfstate-920071567477"
     key            = "envs/dev/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "smachnogo-tfstate-lock"

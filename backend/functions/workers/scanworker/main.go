@@ -15,7 +15,9 @@ import (
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
 	"smachnogo/pkg/llm"
-	_ "smachnogo/pkg/llm/anthropic" // register provider
+	// Anthropic provider disabled until keys exist (owner decision 2026-06-10);
+	// re-enable by restoring the import: _ "smachnogo/pkg/llm/anthropic"
+	_ "smachnogo/pkg/llm/gemini" // register providers
 	"smachnogo/pkg/logging"
 	"smachnogo/pkg/scanproc"
 	"smachnogo/pkg/store"
@@ -91,16 +93,17 @@ func main() {
 	var ssmClient *awsx.SSM
 	if cfg.SSMPrefix != "" {
 		ssmClient = awsx.NewSSM(awsCfg, cfg.SSMPrefix)
-		if cfg.AnthropicAPIKey == "" {
-			if key, err := ssmClient.GetSecret(ctx, "anthropic_api_key"); err == nil {
-				cfg.AnthropicAPIKey = key
+		if cfg.LLMKey() == "" {
+			secretName := cfg.LLMProvider + "_api_key"
+			if key, err := ssmClient.GetSecret(ctx, secretName); err == nil {
+				cfg.SetLLMKey(key)
 			} else {
-				logger.Warn("ssm anthropic_api_key unavailable", zap.Error(err))
+				logger.Warn("ssm llm key unavailable", zap.String("param", secretName), zap.Error(err))
 			}
 		}
 	}
 
-	analyzer, err := llm.New(cfg.LLMProvider, cfg.AnthropicAPIKey, cfg.LLMModelVision, cfg.LLMModelText)
+	analyzer, err := llm.New(cfg.LLMProvider, cfg.LLMKey(), cfg.LLMModelVision, cfg.LLMModelText)
 	if err != nil {
 		logger.Fatal("llm init", zap.Error(err))
 	}
