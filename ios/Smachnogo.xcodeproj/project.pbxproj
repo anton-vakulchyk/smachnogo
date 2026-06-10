@@ -7,27 +7,60 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		28A35332B69E63473C3BC0C4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE3C095585C5BB88AB716E3 /* Models.swift */; };
 		3838F74908D304157BF7F365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14832D0BB58E3B64005040B /* RootTabView.swift */; };
+		469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */; };
+		5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFCDB482F4005D11ADFD79E4 /* MealService.swift */; };
+		762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC8A1C67222242B2EBF5953 /* ScanService.swift */; };
+		7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86B973FC51869E11CA624FB /* DayView.swift */; };
+		8C3E7712699A3F07E0363C1F /* CameraPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BCFCED427A656CC6A46BF7 /* CameraPicker.swift */; };
 		B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */; };
+		C14D4F0A582906B24B0689FD /* ScanResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */; };
+		C2BFC3EC0FD6ADF37A8A83D2 /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1DB363C51F11ED5113A562 /* ScanFlowView.swift */; };
+		DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747AA4CB7B1F22E68EE19415 /* APIClient.swift */; };
+		F727493C36B6D453179969EB /* DateUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 764E5BDEF6E503F035A69BE9 /* DateUtil.swift */; };
 		FA9DB04D5C2CCCDB83C82285 /* SmachnogoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371405627404C5912F29754A /* SmachnogoApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		08BCFCED427A656CC6A46BF7 /* CameraPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPicker.swift; sourceTree = "<group>"; };
+		0E1DB363C51F11ED5113A562 /* ScanFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanFlowView.swift; sourceTree = "<group>"; };
+		2AE3C095585C5BB88AB716E3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		371405627404C5912F29754A /* SmachnogoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmachnogoApp.swift; sourceTree = "<group>"; };
 		485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCompressor.swift; sourceTree = "<group>"; };
 		5B89C606EBEF0DA99335F769 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		747AA4CB7B1F22E68EE19415 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		764E5BDEF6E503F035A69BE9 /* DateUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateUtil.swift; sourceTree = "<group>"; };
+		8BC8A1C67222242B2EBF5953 /* ScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanService.swift; sourceTree = "<group>"; };
 		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Smachnogo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD4E4EEE8C0DCD603572E135 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanResultView.swift; sourceTree = "<group>"; };
+		E86B973FC51869E11CA624FB /* DayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayView.swift; sourceTree = "<group>"; };
 		F9D06D31498D2298A7F25526 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FFCDB482F4005D11ADFD79E4 /* MealService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		02865D545AF5EAB5E40BF943 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				747AA4CB7B1F22E68EE19415 /* APIClient.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
 		0A6FDC1C7ADD0DACFADF5273 /* Smachnogo */ = {
 			isa = PBXGroup;
 			children = (
 				F9D06D31498D2298A7F25526 /* Info.plist */,
 				0D622A8D67F7BBF07A175B85 /* App */,
+				F934DEC415ED56AF8B831C72 /* Features */,
+				85AD2F7ABAA7FE62529A4D2C /* Models */,
+				02865D545AF5EAB5E40BF943 /* Networking */,
+				2DB26D80E62DF734EDAD910E /* Services */,
+				C12AA13A8B2FB7F92C15F82D /* Support */,
 			);
 			path = Smachnogo;
 			sourceTree = "<group>";
@@ -40,6 +73,15 @@
 				371405627404C5912F29754A /* SmachnogoApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		2DB26D80E62DF734EDAD910E /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				FFCDB482F4005D11ADFD79E4 /* MealService.swift */,
+				8BC8A1C67222242B2EBF5953 /* ScanService.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 		31F3C2ED5EB79C5470943EEA = {
@@ -60,12 +102,56 @@
 			path = Configs;
 			sourceTree = "<group>";
 		};
+		46532EA9C5E7AE634B325573 /* Diary */ = {
+			isa = PBXGroup;
+			children = (
+				E86B973FC51869E11CA624FB /* DayView.swift */,
+			);
+			path = Diary;
+			sourceTree = "<group>";
+		};
+		85AD2F7ABAA7FE62529A4D2C /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				2AE3C095585C5BB88AB716E3 /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C12AA13A8B2FB7F92C15F82D /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				764E5BDEF6E503F035A69BE9 /* DateUtil.swift */,
+				5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
 		D450FFDD31D0413800033184 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F934DEC415ED56AF8B831C72 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				46532EA9C5E7AE634B325573 /* Diary */,
+				FF6C1AB39841D4C23257601A /* Scan */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		FF6C1AB39841D4C23257601A /* Scan */ = {
+			isa = PBXGroup;
+			children = (
+				08BCFCED427A656CC6A46BF7 /* CameraPicker.swift */,
+				0E1DB363C51F11ED5113A562 /* ScanFlowView.swift */,
+				C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */,
+			);
+			path = Scan;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -126,8 +212,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */,
 				B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */,
+				8C3E7712699A3F07E0363C1F /* CameraPicker.swift in Sources */,
+				F727493C36B6D453179969EB /* DateUtil.swift in Sources */,
+				7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */,
+				469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */,
+				5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */,
+				28A35332B69E63473C3BC0C4 /* Models.swift in Sources */,
 				3838F74908D304157BF7F365 /* RootTabView.swift in Sources */,
+				C2BFC3EC0FD6ADF37A8A83D2 /* ScanFlowView.swift in Sources */,
+				C14D4F0A582906B24B0689FD /* ScanResultView.swift in Sources */,
+				762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */,
 				FA9DB04D5C2CCCDB83C82285 /* SmachnogoApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
