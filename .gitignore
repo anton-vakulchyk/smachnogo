@@ -34,3 +34,7 @@ build/
 
 # Tooling scratch
 .firecrawl/
+
+# Go local build outputs (dir-named binaries)
+backend/functions/api/api
+backend/functions/workers/scanworker/scanworker
