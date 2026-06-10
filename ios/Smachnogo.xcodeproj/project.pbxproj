@@ -1,0 +1,331 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3838F74908D304157BF7F365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14832D0BB58E3B64005040B /* RootTabView.swift */; };
+		B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */; };
+		FA9DB04D5C2CCCDB83C82285 /* SmachnogoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371405627404C5912F29754A /* SmachnogoApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		371405627404C5912F29754A /* SmachnogoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmachnogoApp.swift; sourceTree = "<group>"; };
+		485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		5B89C606EBEF0DA99335F769 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Smachnogo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BD4E4EEE8C0DCD603572E135 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		F9D06D31498D2298A7F25526 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0A6FDC1C7ADD0DACFADF5273 /* Smachnogo */ = {
+			isa = PBXGroup;
+			children = (
+				F9D06D31498D2298A7F25526 /* Info.plist */,
+				0D622A8D67F7BBF07A175B85 /* App */,
+			);
+			path = Smachnogo;
+			sourceTree = "<group>";
+		};
+		0D622A8D67F7BBF07A175B85 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */,
+				A14832D0BB58E3B64005040B /* RootTabView.swift */,
+				371405627404C5912F29754A /* SmachnogoApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		31F3C2ED5EB79C5470943EEA = {
+			isa = PBXGroup;
+			children = (
+				379FCA116EDC7CD8A772FD07 /* Configs */,
+				0A6FDC1C7ADD0DACFADF5273 /* Smachnogo */,
+				D450FFDD31D0413800033184 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		379FCA116EDC7CD8A772FD07 /* Configs */ = {
+			isa = PBXGroup;
+			children = (
+				5B89C606EBEF0DA99335F769 /* Debug.xcconfig */,
+				BD4E4EEE8C0DCD603572E135 /* Release.xcconfig */,
+			);
+			path = Configs;
+			sourceTree = "<group>";
+		};
+		D450FFDD31D0413800033184 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DEA9010017B77185396F4714 /* Smachnogo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 229AB8DBD6DADBF6C452B1DF /* Build configuration list for PBXNativeTarget "Smachnogo" */;
+			buildPhases = (
+				4CA545F30070BF387FDEF9B0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Smachnogo;
+			packageProductDependencies = (
+			);
+			productName = Smachnogo;
+			productReference = BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0141699069C82A60A3F9228C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					DEA9010017B77185396F4714 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2486DC9834483913813811F9 /* Build configuration list for PBXProject "Smachnogo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 31F3C2ED5EB79C5470943EEA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DEA9010017B77185396F4714 /* Smachnogo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4CA545F30070BF387FDEF9B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */,
+				3838F74908D304157BF7F365 /* RootTabView.swift in Sources */,
+				FA9DB04D5C2CCCDB83C82285 /* SmachnogoApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0B9D2FC7B6C3787D79354A0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5B89C606EBEF0DA99335F769 /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		36665D332318337D8CDEBA0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = BD4E4EEE8C0DCD603572E135 /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		5FB5D64D0D6995E678E6618E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Smachnogo/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pick an existing photo of your meal to log it — for example one you took earlier today.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.smachnogo.ios;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B7F5F73155793D49CBECE34D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Smachnogo/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pick an existing photo of your meal to log it — for example one you took earlier today.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.smachnogo.ios;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		229AB8DBD6DADBF6C452B1DF /* Build configuration list for PBXNativeTarget "Smachnogo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5FB5D64D0D6995E678E6618E /* Debug */,
+				B7F5F73155793D49CBECE34D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2486DC9834483913813811F9 /* Build configuration list for PBXProject "Smachnogo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0B9D2FC7B6C3787D79354A0F /* Debug */,
+				36665D332318337D8CDEBA0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0141699069C82A60A3F9228C /* Project object */;
+}

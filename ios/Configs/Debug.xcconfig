@@ -1,0 +1,6 @@
+// Debug points at the local dev API. Secrets (the bearer token) live in
+// the gitignored Secrets.xcconfig — copy Secrets.example.xcconfig to start.
+#include? "Secrets.xcconfig"
+
+// xcconfig eats "//" as a comment — $() splits the slashes safely.
+API_BASE_URL = http:/$()/localhost:8090

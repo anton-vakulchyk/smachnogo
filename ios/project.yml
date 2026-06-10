@@ -1,0 +1,34 @@
+name: Smachnogo
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+configFiles:
+  Debug: Configs/Debug.xcconfig
+  Release: Configs/Release.xcconfig
+
+targets:
+  Smachnogo:
+    type: application
+    platform: iOS
+    sources:
+      - Smachnogo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.smachnogo.ios
+        TARGETED_DEVICE_FAMILY: "1" # iPhone-only v1 (no iPad screenshots/review surface)
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Smachnogo photographs your meal to estimate its calories and nutrition."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Pick an existing photo of your meal to log it — for example one you took earlier today."
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        ITSAppUsesNonExemptEncryption: NO
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: Smachnogo/Info.plist
+      properties:
+        APIBaseURL: $(API_BASE_URL)
+        APIBearerToken: $(API_BEARER_TOKEN)
+        ITSAppUsesNonExemptEncryption: false
