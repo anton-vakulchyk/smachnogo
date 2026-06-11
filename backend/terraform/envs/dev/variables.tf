@@ -62,3 +62,9 @@ variable "appstore_verify_mode" {
   type        = string
   default     = "insecure_dev"
 }
+
+variable "apple_verify_mode" {
+  description = "Sign-in-with-Apple token verification: full (Apple JWKS) or insecure_dev (decode-only; refused by the app in prod)"
+  type        = string
+  default     = "insecure_dev"
+}

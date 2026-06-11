@@ -49,6 +49,8 @@ type Config struct {
 	// App Store server-side verification (M7.2).
 	AppStoreVerifyMode string // full | insecure_dev (Xcode-signed JWS; refused when Env=prod)
 	AppleAppBundleID   string
+	// Sign in with Apple token verification (M8). Same dev escape pattern.
+	AppleVerifyMode string // full | insecure_dev (refused when Env=prod)
 
 	PresignTTL    time.Duration
 	GitSHA        string
@@ -92,6 +94,7 @@ func Load() (*Config, error) {
 
 		AppStoreVerifyMode: getenv("APPSTORE_VERIFY_MODE", "full"),
 		AppleAppBundleID:   getenv("APPLE_APP_BUNDLE_ID", "app.smachnogo.ios"),
+		AppleVerifyMode:    getenv("APPLE_VERIFY_MODE", "full"),
 
 		PresignTTL:    15 * time.Minute,
 		GitSHA:        getenv("GIT_SHA", "dev"),
@@ -126,6 +129,9 @@ func Load() (*Config, error) {
 	// Xcode-StoreKit-signed transactions; a prod deploy must never run it.
 	if c.AppStoreVerifyMode == "insecure_dev" && c.Env == "prod" {
 		return nil, fmt.Errorf("APPSTORE_VERIFY_MODE=insecure_dev is forbidden in prod")
+	}
+	if c.AppleVerifyMode == "insecure_dev" && c.Env == "prod" {
+		return nil, fmt.Errorf("APPLE_VERIFY_MODE=insecure_dev is forbidden in prod")
 	}
 	return c, nil
 }

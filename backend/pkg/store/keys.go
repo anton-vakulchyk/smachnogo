@@ -16,6 +16,7 @@ const (
 	skQuotaPrefix = "QUOTA#"
 	pkTxnPrefix   = "TXN#"   // Apple originalTransactionId → owning user
 	pkNotifPrefix = "NOTIF#" // App Store notificationUUID dedup
+	pkApplePrefix = "APPLE#" // Sign-in-with-Apple sub → owning user
 	skMeta        = "META"
 )
 
@@ -29,6 +30,10 @@ func TxnPK(originalTransactionID string) string { return pkTxnPrefix + originalT
 
 // NotifPK keys the webhook dedup item (duplicate deliveries are normal).
 func NotifPK(notificationUUID string) string { return pkNotifPrefix + notificationUUID }
+
+// ApplePK keys the Sign-in-with-Apple sub → owning-user lookup item: one
+// canonical diary per Apple ID; recovery repoints it (latest device wins).
+func ApplePK(appleSub string) string { return pkApplePrefix + appleSub }
 
 func MetaSK() string { return skMeta }
 

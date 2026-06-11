@@ -36,7 +36,8 @@ func (h *Users) Me(w http.ResponseWriter, r *http.Request) {
 		Entitlement    models.Entitlement `json:"entitlement"`
 		ScansRemaining int                `json:"scans_remaining"`
 		AllowanceEnds  *time.Time         `json:"allowance_ends_at"`
-	}{Entitlement: ent.Profile.Ent()}
+		AppleLinked    bool               `json:"apple_linked"`
+	}{Entitlement: ent.Profile.Ent(), AppleLinked: ent.Profile.AppleSub != ""}
 
 	if !ent.Enforced || ent.Subscribed {
 		used, err := h.Store.GetDailyScans(r.Context(), middleware.UserID(r.Context()), now.Format("2006-01-02"))

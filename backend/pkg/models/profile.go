@@ -43,6 +43,7 @@ type Profile struct {
 	AllowanceStartedAt    int64       `dynamodbav:"allowance_started_at,omitempty"` // epoch seconds; set on first scan
 	EntitlementUpdatedAt  int64       `dynamodbav:"entitlement_updated_at,omitempty"` // epoch millis (Apple signedDate) — webhook ordering authority
 	OriginalTransactionID string      `dynamodbav:"original_transaction_id,omitempty"`
+	AppleSub              string      `dynamodbav:"apple_sub,omitempty"` // Sign-in-with-Apple linkage (M8)
 	CreatedAt             int64       `dynamodbav:"created_at,omitempty"` // epoch seconds
 }
 

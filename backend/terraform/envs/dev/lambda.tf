@@ -35,6 +35,7 @@ resource "aws_lambda_function" "api" {
       ROLE                 = "api"
       AUTH_MODE            = var.auth_mode
       APPSTORE_VERIFY_MODE = var.appstore_verify_mode
+      APPLE_VERIFY_MODE    = var.apple_verify_mode
       COGNITO_POOL_ID   = aws_cognito_user_pool.main.id
       COGNITO_CLIENT_ID = aws_cognito_user_pool_client.ios.id
     })

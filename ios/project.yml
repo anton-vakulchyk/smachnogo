@@ -27,6 +27,12 @@ targets:
     platform: iOS
     sources:
       - Smachnogo
+    entitlements:
+      path: Smachnogo/Smachnogo.entitlements
+      properties:
+        # Requires a paid Apple Developer team for device builds; simulator
+        # builds sign-to-run-locally. See docs/appstore-readiness.md.
+        com.apple.developer.applesignin: [Default]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.smachnogo.ios

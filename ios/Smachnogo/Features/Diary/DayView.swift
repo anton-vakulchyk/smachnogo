@@ -104,7 +104,12 @@ struct DayView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView()
+            SettingsView(onDataChanged: {
+                Task {
+                    await load()
+                    await store.refreshServerState()
+                }
+            })
         }
         .alert("Camera access is off", isPresented: $cameraDenied) {
             Button("Open Settings") {

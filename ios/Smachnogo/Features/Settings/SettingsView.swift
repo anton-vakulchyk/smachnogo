@@ -1,8 +1,13 @@
 import SwiftUI
+import AuthenticationServices
 
-/// Settings: data export, account deletion (App Store 5.1.1(v)), the
-/// estimates disclaimer, legal links. M7 adds manage-subscription.
+/// Settings: Apple backup/restore, subscription, data export, account
+/// deletion (App Store 5.1.1(v)), the estimates disclaimer, legal links.
 struct SettingsView: View {
+    /// Fired when server-side data changed under us (Apple recovery) so the
+    /// presenting view reloads the diary.
+    var onDataChanged: (() -> Void)? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var exportURL: URL?
     @State private var exporting = false
@@ -11,6 +16,9 @@ struct SettingsView: View {
     @State private var deleted = false
     @State private var errorText: String?
     @State private var showPaywall = false
+    @State private var appleStatus: String?
+    @State private var appleBusy = false
+    @State private var rawNonce = ""
 
     private let service = MealService()
 
@@ -37,6 +45,34 @@ struct SettingsView: View {
                         if deleting { ProgressView() } else { Label("Delete account & data", systemImage: "trash") }
                     }
                     .disabled(deleting)
+                }
+
+                Section {
+                    if StoreService.shared.me?.appleLinked == true {
+                        Label("Backed up with your Apple ID", systemImage: "checkmark.icloud")
+                            .foregroundStyle(.secondary)
+                    }
+                    if appleBusy {
+                        ProgressView()
+                    } else {
+                        SignInWithAppleButton(.continue) { request in
+                            rawNonce = UUID().uuidString + UUID().uuidString
+                            request.nonce = AppleLinkService.sha256Hex(rawNonce)
+                        } onCompletion: { result in
+                            handleApple(result)
+                        }
+                        .signInWithAppleButtonStyle(.whiteOutline)
+                        .frame(height: 44)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
+                    if let appleStatus {
+                        Text(appleStatus).font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Back up & restore")
+                } footer: {
+                    Text("Link your Apple ID to restore your diary and subscription on a new iPhone. Without it, your data lives only on this device.")
                 }
 
                 Section("Subscription") {
@@ -93,6 +129,43 @@ struct SettingsView: View {
                 Button("OK") { dismiss() }
             } message: {
                 Text("Your data is gone. The app starts fresh on next launch.")
+            }
+        }
+    }
+
+    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .failure(let err):
+            // Includes cancellation and the simulator/no-team cases —
+            // surface gently, never block anything else.
+            if (err as? ASAuthorizationError)?.code == .canceled { return }
+            appleStatus = "Apple sign-in didn't complete: \(err.localizedDescription)"
+        case .success(let auth):
+            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = cred.identityToken,
+                  let token = String(data: tokenData, encoding: .utf8) else {
+                appleStatus = "Apple didn't return an identity token."
+                return
+            }
+            appleBusy = true
+            Task {
+                defer { appleBusy = false }
+                do {
+                    let resp = try await AppleLinkService().link(identityToken: token, rawNonce: rawNonce)
+                    switch resp.status {
+                    case "recovered":
+                        appleStatus = "Diary restored — \(resp.itemsCopied ?? 0) items moved to this iPhone."
+                        onDataChanged?()
+                        await StoreService.shared.refresh()
+                    default:
+                        appleStatus = "Backed up with your Apple ID."
+                        await StoreService.shared.refreshServerState()
+                    }
+                } catch let APIError.http(_, code, message) where code == "APPLE_MISMATCH" {
+                    appleStatus = message
+                } catch {
+                    appleStatus = error.localizedDescription
+                }
             }
         }
     }

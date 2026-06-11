@@ -21,6 +21,7 @@ type Deps struct {
 	Meals         *handlers.Meals
 	Users         *handlers.Users
 	Subscriptions *handlers.Subscriptions // App Store receipt + webhook (M7.2)
+	Apple         *handlers.Apple         // Sign in with Apple link/recover (M8)
 	Store         *store.Store            // entitlement middleware's profile reads
 	Cognito       *middleware.CognitoAuth // required when AUTH_MODE=cognito
 }
@@ -75,6 +76,9 @@ func NewRouter(d Deps) http.Handler {
 		v1.With(ent).Get("/users/me", d.Users.Me)
 		v1.Delete("/users/me", d.Users.DeleteMe)
 		v1.Get("/export", d.Users.Export)
+		if d.Apple != nil {
+			v1.Post("/users/apple", d.Apple.Link)
+		}
 
 		if d.Subscriptions != nil {
 			v1.Post("/subscriptions/receipt", d.Subscriptions.Receipt)

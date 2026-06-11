@@ -26,6 +26,9 @@ func TestKeyFormats(t *testing.T) {
 	if got := NotifPK("uuid-1"); got != "NOTIF#uuid-1" {
 		t.Fatalf("NotifPK = %q", got)
 	}
+	if got := ApplePK("001234.abcd"); got != "APPLE#001234.abcd" {
+		t.Fatalf("ApplePK = %q", got)
+	}
 	if got := MetaSK(); got != "META" {
 		t.Fatalf("MetaSK = %q", got)
 	}

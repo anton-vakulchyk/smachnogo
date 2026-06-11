@@ -13,6 +13,7 @@ import (
 	"smachnogo/pkg/api"
 	"smachnogo/pkg/api/handlers"
 	"smachnogo/pkg/api/middleware"
+	"smachnogo/pkg/applesign"
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
 	"smachnogo/pkg/devicecheck"
@@ -105,6 +106,18 @@ func main() {
 	if cfg.CognitoPoolID != "" {
 		usersH.Cognito = awsx.NewCognito(awsCfg, cfg.CognitoPoolID)
 	}
+
+	var appleVerifier applesign.Verifier = applesign.Insecure{}
+	if cfg.AppleVerifyMode == "full" {
+		// Background context: the JWKS cache outlives the bootstrap deadline.
+		v, err := applesign.NewJWKSVerifier(context.Background(), cfg.AppleAppBundleID)
+		if err != nil {
+			logger.Fatal("apple verifier init", zap.Error(err))
+		}
+		appleVerifier = v
+	}
+	appleH := &handlers.Apple{Cfg: cfg, Store: st, S3: s3c, Cognito: usersH.Cognito, Verifier: appleVerifier}
+
 	router := api.NewRouter(api.Deps{
 		Cfg:           cfg,
 		Logger:        logger,
@@ -112,6 +125,7 @@ func main() {
 		Meals:         &handlers.Meals{Cfg: cfg, Store: st, Analyzer: analyzer},
 		Users:         usersH,
 		Subscriptions: handlers.NewSubscriptions(cfg, st),
+		Apple:         appleH,
 		Store:         st,
 		Cognito:       cognitoAuth,
 	})

@@ -74,6 +74,17 @@ Not collected: name, email, phone, precise location (GPS is stripped on-device),
 | Model bake-off + eval harness | `tests/eval` (5 fixtures × N models). 2026-06-11: gemini-2.5-flash 5/5 $0.0031/scan (default, kept); gemini-3.1-flash-lite 5/5 $0.0013 2.8s (cost-down candidate — needs bigger fixture set); 3-flash-preview/3.5-flash had latency spikes; Opus/Sonnet pending Anthropic keys |
 | CI workflow | `.github/workflows/ci.yml` (test→build; manual deploy via OIDC role — see Anton list) |
 
+## ✅ Done in M8 (Sign in with Apple — built & verified)
+
+| Item | Notes |
+|---|---|
+| `POST /v1/users/apple` link/recover | native SIWA identity token verified vs Apple JWKS (`APPLE_VERIFY_MODE=full` in prod — forged-token 401 verified live; dev decode-only for testing); nonce check; one Apple ID per diary (409 on mismatch) |
+| Recovery = bounded item-copy | meals+profile old→new user, subscription/TXN owner transferred, link repointed, old partition+photos+Cognito user deleted; idempotent re-sign-in; full lifecycle e2e'd on deployed dev |
+| iOS "Back up & restore" in Settings | native SignInWithAppleButton + nonce, recovered→diary reload, `apple_linked` shown from /users/me; simulator shows the system sign-in prompt (no Apple ID on sim — expected) |
+| SIWA entitlement | `com.apple.developer.applesignin` via project.yml → Smachnogo.entitlements |
+
+**M8 caveats for Anton:** the on-device flow needs your **paid Apple Developer team** (capability registers with the App ID) and a device/simulator **signed into an Apple ID** — test once: link on device A, recover on device B (old device demotes to a fresh empty account by design — its Keychain identity was deleted server-side). The old device's already-issued access token keeps verifying ≤1h against an empty partition (same accepted residual as account deletion).
+
 ## 🧑 Anton — required before the paywall launch (M7 → live)
 
 7. **Paid Apps Agreement** + banking/tax in ASC.
