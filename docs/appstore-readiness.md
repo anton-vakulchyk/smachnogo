@@ -95,23 +95,37 @@ the period status dot recolor automatically — simulator-verified both ways
 
 **M8 caveats for Anton:** the on-device flow needs your **paid Apple Developer team** (capability registers with the App ID) and a device/simulator **signed into an Apple ID** — test once: link on device A, recover on device B (old device demotes to a fresh empty account by design — its Keychain identity was deleted server-side). The old device's already-issued access token keeps verifying ≤1h against an empty partition (same accepted residual as account deletion).
 
+## ✅ Done 2026-06-11 via the ASC API (`backend/tools/asc`, re-run safe)
+
+Apple Developer team CP598M5SUG · ASC API key 2XBLARXMH2 (Admin, in
+`backend/secrets/` + issuer in dev.env) · app record **6779397731**.
+
+| Item | State |
+|---|---|
+| Bundle ID `app.smachnogo.ios` + APPLE_ID_AUTH (SIWA) capability | created via API |
+| App record "Smachnogo" | created by Anton (web — API can't) |
+| Subscription group `Premium` + en-US localization | created via API |
+| `smachnogo.premium.monthly` — $6.99/mo | created, priced (USA base, equalized) |
+| `smachnogo.premium.annual` — $39.99/yr + 7-day FREE_TRIAL intro offer | created, priced, trial on |
+| **Billing Grace Period ON** (16 days, all renewals, sandbox too) | PATCHed via API |
+| Family Sharing | left OFF (irreversible once on) |
+| Xcode signing | `DEVELOPMENT_TEAM=CP598M5SUG` in project.yml |
+
+Note: subscriptions show "Missing Metadata" until a review screenshot is
+attached and they ride the FIRST app version submission — expected; handled
+at submission time.
+
 ## 🧑 Anton — required before the paywall launch (M7 → live)
 
-7. **Paid Apps Agreement** + banking/tax in ASC.
+7. **Paid Apps Agreement** + banking/tax in ASC (account has live apps — may already be done; verify under Business).
 8. **Small Business Program** enrollment — **≥1 fiscal month before paywall launch** (margin math assumes 15%; un-enrolled = 30% and $6.99 nets ~$4.89).
 9. **EU DSA trader declaration** in ASC (or accept EU delisting).
-10. **Age rating questionnaire** (expect 4+; no objectionable content).
-11. **Subscription products in ASC — IDs must match the code exactly:**
-    - Group: `Premium`
-    - `smachnogo.premium.monthly` — $6.99/month
-    - `smachnogo.premium.annual` — $39.99/year + **7-day free introductory offer**
-12. **App Store Server Notifications V2 URL** in ASC:
-    - Production: `https://b37hzro1uk.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore`
-    - Sandbox: `https://dy9kj15vph.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore` (dev)
-13. **Enable Billing Grace Period** in ASC (off by default — without it a card hiccup hard-locks a paying user). **Leave Family Sharing OFF** (irreversible once on).
-14. **DeviceCheck key**: Certificates → Keys → create a DeviceCheck `.p8`; hand me key ID + team ID + the file → I implement the Apple API caller and flip `DEVICECHECK_ENABLED` (until then reinstall abuse is bounded by Keychain persistence only).
-15. **One Xcode-launched run** (Cmd-R) to exercise the StoreKit purchase sheet against `Smachnogo.storekit` — simctl launches can't inject the config (server flow already verified). Sandbox purchase test follows once ASC products exist.
-16. *(optional)* GitHub repo + AWS OIDC deploy role + `AWS_DEPLOY_ROLE_ARN` secret to activate CI deploys.
+10. **App Store Server Notifications V2 URLs** (web-only, smachnogo app → App Information):
+    - Production URL: `https://b37hzro1uk.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore`
+    - Sandbox URL: `https://dy9kj15vph.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore`
+11. **DeviceCheck key**: developer.apple.com → Keys → create a DeviceCheck `.p8`; hand me key ID + the file (team ID known) → I implement the Apple API caller and flip `DEVICECHECK_ENABLED`.
+12. **One Xcode-launched run** (Cmd-R) to exercise the StoreKit purchase sheet against `Smachnogo.storekit`; sandbox purchase test now possible (products exist).
+13. *(optional)* GitHub repo + AWS OIDC deploy role + `AWS_DEPLOY_ROLE_ARN` secret to activate CI deploys.
 
 ## 🔐 Anton — security follow-ups (from the build, do these soon)
 
