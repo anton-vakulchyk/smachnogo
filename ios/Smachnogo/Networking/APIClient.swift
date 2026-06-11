@@ -61,22 +61,41 @@ struct APIClient: Sendable {
         try await request(path, method: "POST", body: body)
     }
 
-    private func request<T: Decodable, B: Encodable>(
+    func request<T: Decodable, B: Encodable>(
         _ path: String, method: String, query: [URLQueryItem] = [], body: B?
     ) async throws -> T {
-        // One transparent retry on 401: invalidate the cached token and let
-        // the provider mint/refresh a fresh one.
+        var encoded: Data?
+        if let body { encoded = try JSONEncoder().encode(body) }
+        let data = try await perform(path, method: method, query: query, body: encoded)
         do {
-            return try await requestOnce(path, method: method, query: query, body: body)
-        } catch let APIError.http(status, _, _) where status == 401 {
-            await tokenProvider.invalidate()
-            return try await requestOnce(path, method: method, query: query, body: body)
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(error)
         }
     }
 
-    private func requestOnce<T: Decodable, B: Encodable>(
-        _ path: String, method: String, query: [URLQueryItem] = [], body: B?
-    ) async throws -> T {
+    /// Request expecting no response body (204s).
+    func requestVoid(_ path: String, method: String, query: [URLQueryItem] = []) async throws {
+        _ = try await perform(path, method: method, query: query, body: nil)
+    }
+
+    /// Raw bytes (export download).
+    func rawGet(_ path: String, query: [URLQueryItem] = []) async throws -> Data {
+        try await perform(path, method: "GET", query: query, body: nil)
+    }
+
+    /// Core: builds the request, sends, maps the error envelope, and
+    /// retries ONCE on 401 after invalidating the cached token.
+    private func perform(_ path: String, method: String, query: [URLQueryItem], body: Data?) async throws -> Data {
+        do {
+            return try await performOnce(path, method: method, query: query, body: body)
+        } catch let APIError.http(status, _, _) where status == 401 {
+            await tokenProvider.invalidate()
+            return try await performOnce(path, method: method, query: query, body: body)
+        }
+    }
+
+    private func performOnce(_ path: String, method: String, query: [URLQueryItem], body: Data?) async throws -> Data {
         var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { comps.queryItems = query }
         var req = URLRequest(url: comps.url!)
@@ -84,7 +103,7 @@ struct APIClient: Sendable {
         req.setValue("Bearer \(try await tokenProvider.token())", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-Id")
-        if let body { req.httpBody = try JSONEncoder().encode(body) }
+        req.httpBody = body
 
         let (data, resp): (Data, URLResponse)
         do {
@@ -99,11 +118,7 @@ struct APIClient: Sendable {
             }
             throw APIError.http(status: status, code: "HTTP_\(status)", message: String(data: data, encoding: .utf8) ?? "")
         }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw APIError.decoding(error)
-        }
+        return data
     }
 
     /// Raw PUT to a presigned S3 URL — no auth header (the signature IS the

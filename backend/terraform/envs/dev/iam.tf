@@ -30,18 +30,34 @@ data "aws_iam_policy_document" "api" {
       "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
       "dynamodb:Query", "dynamodb:DescribeTable",
       "dynamodb:ConditionCheckItem", "dynamodb:DeleteItem",
+      "dynamodb:BatchWriteItem", # account-deletion cascade
     ]
     resources = [aws_dynamodb_table.main.arn]
   }
   statement {
     sid       = "PresignScanUploads"
-    actions   = ["s3:PutObject"]
+    actions   = ["s3:PutObject", "s3:DeleteObject"] # delete = account-deletion cascade
     resources = ["${aws_s3_bucket.photos.arn}/scans/*"]
+  }
+  statement {
+    sid       = "ListForCascade"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.photos.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["scans/*"]
+    }
   }
   statement {
     sid       = "Enqueue"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.scans.arn]
+  }
+  statement {
+    sid       = "AccountDeletion"
+    actions   = ["cognito-idp:ListUsers", "cognito-idp:AdminDeleteUser"]
+    resources = [aws_cognito_user_pool.main.arn]
   }
   statement {
     sid       = "Params"

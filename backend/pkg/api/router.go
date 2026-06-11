@@ -18,6 +18,7 @@ type Deps struct {
 	Logger  *zap.Logger
 	Scans   *handlers.Scans
 	Meals   *handlers.Meals
+	Users   *handlers.Users
 	Cognito *middleware.CognitoAuth // required when AUTH_MODE=cognito
 }
 
@@ -52,6 +53,12 @@ func NewRouter(d Deps) http.Handler {
 
 		v1.Post("/meals", d.Meals.Create)
 		v1.Get("/meals", d.Meals.List)
+		v1.Patch("/meals/{mealID}", d.Meals.Patch)
+		v1.Delete("/meals/{mealID}", d.Meals.Delete)
+		v1.Get("/summary", d.Meals.Summary)
+
+		v1.Delete("/users/me", d.Users.DeleteMe)
+		v1.Get("/export", d.Users.Export)
 	})
 
 	return r

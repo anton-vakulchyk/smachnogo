@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -121,6 +122,79 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// DeletePrefix removes every object under prefix (account-deletion cascade
+// for the user's photos). Returns the number of objects deleted.
+func (s *S3) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	deleted := 0
+	var token *string
+	for {
+		page, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: &s.bucket, Prefix: &prefix, ContinuationToken: token,
+		})
+		if err != nil {
+			return deleted, fmt.Errorf("list prefix: %w", err)
+		}
+		if len(page.Contents) > 0 {
+			objs := make([]s3types.ObjectIdentifier, 0, len(page.Contents))
+			for _, o := range page.Contents {
+				objs = append(objs, s3types.ObjectIdentifier{Key: o.Key})
+			}
+			out, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				Bucket: &s.bucket,
+				Delete: &s3types.Delete{Objects: objs, Quiet: aws.Bool(true)},
+			})
+			if err != nil {
+				return deleted, fmt.Errorf("delete objects: %w", err)
+			}
+			deleted += len(objs) - len(out.Errors)
+			if len(out.Errors) > 0 {
+				return deleted, fmt.Errorf("delete objects: %d failed", len(out.Errors))
+			}
+		}
+		if page.IsTruncated == nil || !*page.IsTruncated {
+			return deleted, nil
+		}
+		token = page.NextContinuationToken
+	}
+}
+
+// --- Cognito (admin ops for account deletion) ---
+
+type Cognito struct {
+	client *cognitoidentityprovider.Client
+	poolID string
+}
+
+func NewCognito(cfg aws.Config, poolID string) *Cognito {
+	return &Cognito{client: cognitoidentityprovider.NewFromConfig(cfg), poolID: poolID}
+}
+
+// DeleteUserBySub removes the Cognito user whose sub matches userID.
+// Usernames are opaque, so resolve sub → username via ListUsers (sub is a
+// filterable standard attribute).
+func (c *Cognito) DeleteUserBySub(ctx context.Context, sub string) error {
+	filter := fmt.Sprintf(`sub = "%s"`, sub)
+	out, err := c.client.ListUsers(ctx, &cognitoidentityprovider.ListUsersInput{
+		UserPoolId: &c.poolID,
+		Filter:     &filter,
+		Limit:      aws.Int32(1),
+	})
+	if err != nil {
+		return fmt.Errorf("list users by sub: %w", err)
+	}
+	if len(out.Users) == 0 {
+		return nil // already gone — deletion is idempotent
+	}
+	_, err = c.client.AdminDeleteUser(ctx, &cognitoidentityprovider.AdminDeleteUserInput{
+		UserPoolId: &c.poolID,
+		Username:   out.Users[0].Username,
+	})
+	if err != nil {
+		return fmt.Errorf("admin delete user: %w", err)
+	}
+	return nil
 }
 
 // --- SSM ---

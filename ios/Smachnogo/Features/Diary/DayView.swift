@@ -2,9 +2,11 @@ import SwiftUI
 import PhotosUI
 import AVFoundation
 
-/// M1 diary: today's meals + the scan entry points. The empty state IS the
-/// onboarding. Calendar navigation arrives in M3.
+/// The diary: navigate any day (strip ±1, month-grid picker), see logged +
+/// planned meals, tap to edit, scan via camera/library. The empty state IS
+/// the onboarding.
 struct DayView: View {
+    @State private var selectedDate = Date()
     @State private var meals: [Meal] = []
     @State private var loading = false
     @State private var loadError: String?
@@ -13,37 +15,37 @@ struct DayView: View {
     @State private var cameraDenied = false
     @State private var photoItem: PhotosPickerItem?
     @State private var scanImage: UIImage?
+    @State private var editingMeal: Meal?
+    @State private var showSettings = false
 
     private let mealService = MealService()
-    private var today: String { DateUtil.dayString() }
+    private var dayKey: String { DateUtil.dayString(selectedDate) }
+    private var isFutureDay: Bool { dayKey > DateUtil.dayString() }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if meals.isEmpty && !loading {
-                    emptyState
-                } else {
-                    mealList
-                }
+            VStack(spacing: 8) {
+                CalendarStrip(selectedDate: $selectedDate)
+                content
             }
-            .navigationTitle("Today")
+            .navigationTitle(navTitle)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
+                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Image(systemName: "photo.on.rectangle")
                     }
                     .accessibilityLabel("Scan from photo library")
-                    .accessibilityIdentifier("scan.library")
-                    Button { openCamera() } label: {
-                        Image(systemName: "camera")
-                    }
-                    .accessibilityLabel("Scan with camera")
-                    .accessibilityIdentifier("scan.camera")
+                    Button { openCamera() } label: { Image(systemName: "camera") }
+                        .accessibilityLabel("Scan with camera")
                 }
             }
-            .refreshable { await load() }
         }
-        .task { await load() }
+        .task(id: dayKey) { await load() }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
@@ -63,6 +65,14 @@ struct DayView: View {
                 Task { await load() }
             }
         }
+        .sheet(item: $editingMeal) { meal in
+            MealEditSheet(meal: meal) {
+                Task { await load() }
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
         .alert("Camera access is off", isPresented: $cameraDenied) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -75,9 +85,50 @@ struct DayView: View {
         }
     }
 
+    private var navTitle: String {
+        Calendar.current.isDateInToday(selectedDate) ? "Today" : selectedDate.formatted(.dateTime.day().month())
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        let logged = meals.filter { $0.state == "logged" }
+        let planned = meals.filter { $0.state == "planned" }
+        if meals.isEmpty && !loading {
+            emptyState
+        } else {
+            List {
+                if !logged.isEmpty {
+                    Section { totalsHeader(logged) }
+                }
+                if !planned.isEmpty {
+                    Section("Planned") {
+                        ForEach(planned) { meal in
+                            mealRowButton(meal)
+                        }
+                    }
+                }
+                if !logged.isEmpty {
+                    Section("Meals") {
+                        ForEach(logged) { meal in
+                            mealRowButton(meal)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .refreshable { await load() }
+        }
+    }
+
+    private func mealRowButton(_ meal: Meal) -> some View {
+        Button { editingMeal = meal } label: {
+            MealRow(meal: meal)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func openCamera() {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            cameraDenied = false
             return // simulator: no camera; library button covers it
         }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -92,7 +143,7 @@ struct DayView: View {
         loading = true
         defer { loading = false }
         do {
-            meals = try await mealService.meals(on: today)
+            meals = try await mealService.meals(on: dayKey)
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -102,22 +153,26 @@ struct DayView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "camera.viewfinder")
+            Image(systemName: isFutureDay ? "calendar.badge.plus" : "camera.viewfinder")
                 .font(.system(size: 56))
                 .foregroundStyle(.secondary)
-            Text("Scan your first meal")
+            Text(isFutureDay ? "Nothing planned yet" : "Scan your first meal")
                 .font(.title3.weight(.semibold))
-            Text("Point the camera at your plate — calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot.")
+            Text(isFutureDay
+                 ? "Planning ahead? Scan or describe a meal and pick this date when saving."
+                 : "Point the camera at your plate — calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            Button { openCamera() } label: {
-                Label("Scan a meal", systemImage: "camera")
-                    .frame(maxWidth: 220)
+            if !isFutureDay {
+                Button { openCamera() } label: {
+                    Label("Scan a meal", systemImage: "camera")
+                        .frame(maxWidth: 220)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
             if let loadError {
                 Text(loadError).font(.footnote).foregroundStyle(.red).padding(.horizontal)
             }
@@ -126,21 +181,7 @@ struct DayView: View {
         }
     }
 
-    private var mealList: some View {
-        List {
-            Section {
-                totalsHeader
-            }
-            Section("Meals") {
-                ForEach(meals) { meal in
-                    MealRow(meal: meal)
-                }
-            }
-        }
-    }
-
-    private var totalsHeader: some View {
-        let logged = meals.filter { $0.state == "logged" }
+    private func totalsHeader(_ logged: [Meal]) -> some View {
         let totals = logged.reduce(Nutrients.zero) { $0 + $1.nutrients }
         return HStack {
             stat("\(totals.caloriesKcal)", "kcal")
@@ -187,6 +228,9 @@ struct MealRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 }

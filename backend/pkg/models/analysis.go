@@ -121,6 +121,41 @@ func (t *TextEstimate) Totals() EstimateTotals {
 	return out
 }
 
+// Plus returns the element-wise sum.
+func (n Nutrients) Plus(b Nutrients) Nutrients {
+	return Nutrients{
+		CaloriesKcal:  n.CaloriesKcal + b.CaloriesKcal,
+		ProteinG:      n.ProteinG + b.ProteinG,
+		FatG:          n.FatG + b.FatG,
+		CarbsG:        n.CarbsG + b.CarbsG,
+		FiberG:        n.FiberG + b.FiberG,
+		SugarG:        n.SugarG + b.SugarG,
+		SodiumMg:      n.SodiumMg + b.SodiumMg,
+		SaturatedFatG: n.SaturatedFatG + b.SaturatedFatG,
+		IronMg:        n.IronMg + b.IronMg,
+		CalciumMg:     n.CalciumMg + b.CalciumMg,
+		Omega3G:       n.Omega3G + b.Omega3G,
+	}
+}
+
+// ScaledBy returns nutrients scaled linearly by factor (kcal rounded,
+// grams/mg to one decimal).
+func (n Nutrients) ScaledBy(f float64) Nutrients {
+	return Nutrients{
+		CaloriesKcal:  int(float64(n.CaloriesKcal)*f + 0.5),
+		ProteinG:      round1(n.ProteinG * f),
+		FatG:          round1(n.FatG * f),
+		CarbsG:        round1(n.CarbsG * f),
+		FiberG:        round1(n.FiberG * f),
+		SugarG:        round1(n.SugarG * f),
+		SodiumMg:      round1(n.SodiumMg * f),
+		SaturatedFatG: round1(n.SaturatedFatG * f),
+		IronMg:        round1(n.IronMg * f),
+		CalciumMg:     round1(n.CalciumMg * f),
+		Omega3G:       round1(n.Omega3G * f),
+	}
+}
+
 // Scale returns a copy of the dish with nutrients and portion scaled
 // linearly by factor. Scores and identity fields are untouched. Always
 // scale from the base (factor relative to 1.0), never compound.
@@ -130,17 +165,7 @@ func (d Dish) Scale(factor float64) Dish {
 	}
 	out := d
 	out.PortionG = int(float64(d.PortionG)*factor + 0.5)
-	out.CaloriesKcal = int(float64(d.CaloriesKcal)*factor + 0.5)
-	out.ProteinG = round1(d.ProteinG * factor)
-	out.FatG = round1(d.FatG * factor)
-	out.CarbsG = round1(d.CarbsG * factor)
-	out.FiberG = round1(d.FiberG * factor)
-	out.SugarG = round1(d.SugarG * factor)
-	out.SodiumMg = round1(d.SodiumMg * factor)
-	out.SaturatedFatG = round1(d.SaturatedFatG * factor)
-	out.IronMg = round1(d.IronMg * factor)
-	out.CalciumMg = round1(d.CalciumMg * factor)
-	out.Omega3G = round1(d.Omega3G * factor)
+	out.Nutrients = d.Nutrients.ScaledBy(factor)
 	return out
 }
 

@@ -94,11 +94,16 @@ func main() {
 		scansH.Queue = awsx.NewSQS(awsCfg, cfg.QueueURL)
 	}
 
+	usersH := &handlers.Users{Store: st, S3: s3c}
+	if cfg.CognitoPoolID != "" {
+		usersH.Cognito = awsx.NewCognito(awsCfg, cfg.CognitoPoolID)
+	}
 	router := api.NewRouter(api.Deps{
 		Cfg:     cfg,
 		Logger:  logger,
 		Scans:   scansH,
 		Meals:   &handlers.Meals{Cfg: cfg, Store: st},
+		Users:   usersH,
 		Cognito: cognitoAuth,
 	})
 
