@@ -40,6 +40,16 @@ type Config struct {
 	ScansEnabled     bool // env fallback; SSM value (cached) wins when SSMPrefix set
 	ClarifyThreshold float64
 
+	// Monetization (M7): "free taste, paid camera".
+	EntitlementMode     string // enforce | off (off = everyone treated as subscribed)
+	FreeScanAllowance   int    // total free photo scans per user
+	FreeWindowDays      int    // free allowance expires this many days after first scan
+	DailyEstimateCapSub int    // text-estimate cap for subscribers (free uses DailyEstimateCap)
+
+	// App Store server-side verification (M7.2).
+	AppStoreVerifyMode string // full | insecure_dev (Xcode-signed JWS; refused when Env=prod)
+	AppleAppBundleID   string
+
 	PresignTTL    time.Duration
 	GitSHA        string
 	HTTPAddr      string
@@ -75,6 +85,14 @@ func Load() (*Config, error) {
 		ScansEnabled:     getbool("SCANS_ENABLED", true),
 		ClarifyThreshold: getfloat("CLARIFY_THRESHOLD", 0.6),
 
+		EntitlementMode:     getenv("ENTITLEMENT_MODE", "enforce"),
+		FreeScanAllowance:   getint("FREE_SCAN_ALLOWANCE", 10),
+		FreeWindowDays:      getint("FREE_WINDOW_DAYS", 7),
+		DailyEstimateCapSub: getint("DAILY_ESTIMATE_CAP_SUB", 50),
+
+		AppStoreVerifyMode: getenv("APPSTORE_VERIFY_MODE", "full"),
+		AppleAppBundleID:   getenv("APPLE_APP_BUNDLE_ID", "app.smachnogo.ios"),
+
 		PresignTTL:    15 * time.Minute,
 		GitSHA:        getenv("GIT_SHA", "dev"),
 		HTTPAddr:      getenv("HTTP_ADDR", ":8080"),
@@ -100,6 +118,14 @@ func Load() (*Config, error) {
 	// and LOCAL_SYNC mode don't send. Role declares which validation applies.
 	if getenv("ROLE", "api") == "api" && !c.LocalSync && c.QueueURL == "" {
 		return nil, fmt.Errorf("QUEUE_URL is required for the api unless LOCAL_SYNC=1")
+	}
+	if c.EntitlementMode != "enforce" && c.EntitlementMode != "off" {
+		return nil, fmt.Errorf("ENTITLEMENT_MODE must be enforce or off, got %q", c.EntitlementMode)
+	}
+	// Skipping Apple-root JWS verification is a dev-only escape for
+	// Xcode-StoreKit-signed transactions; a prod deploy must never run it.
+	if c.AppStoreVerifyMode == "insecure_dev" && c.Env == "prod" {
+		return nil, fmt.Errorf("APPSTORE_VERIFY_MODE=insecure_dev is forbidden in prod")
 	}
 	return c, nil
 }

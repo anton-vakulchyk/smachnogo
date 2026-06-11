@@ -311,3 +311,24 @@ struct EstimateResponse: Codable {
         case label, assumptions, items, totals
     }
 }
+
+/// GET /v1/users/me — billing state behind the scans-remaining indicator.
+struct UserMe: Codable {
+    var entitlement: String
+    var scansRemaining: Int
+    var allowanceEndsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case entitlement
+        case scansRemaining = "scans_remaining"
+        case allowanceEndsAt = "allowance_ends_at"
+    }
+
+    var subscribed: Bool {
+        ["trialing", "active", "grace", "billing_retry"].contains(entitlement)
+    }
+
+    var allowanceEnds: Date? {
+        allowanceEndsAt.flatMap { ISO8601DateFormatter().date(from: $0) }
+    }
+}

@@ -20,6 +20,15 @@ func TestKeyFormats(t *testing.T) {
 	if got := QuotaSK("2026-06-10"); got != "QUOTA#2026-06-10" {
 		t.Fatalf("QuotaSK = %q", got)
 	}
+	if got := TxnPK("2000000123456789"); got != "TXN#2000000123456789" {
+		t.Fatalf("TxnPK = %q", got)
+	}
+	if got := NotifPK("uuid-1"); got != "NOTIF#uuid-1" {
+		t.Fatalf("NotifPK = %q", got)
+	}
+	if got := MetaSK(); got != "META" {
+		t.Fatalf("MetaSK = %q", got)
+	}
 }
 
 func TestMealSKRoundTrip(t *testing.T) {

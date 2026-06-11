@@ -42,6 +42,10 @@ type Scan struct {
 	ConfirmedDishes map[string]ConfirmedDish `json:"confirmed_dishes,omitempty" dynamodbav:"confirmed_dishes,omitempty"`
 	FailureReason   FailureReason            `json:"failure_reason,omitempty" dynamodbav:"failure_reason,omitempty"`
 	QuotaRefunded   bool                     `json:"-" dynamodbav:"quota_refunded"`
+	// AllowanceConsumed records whether this scan ate a free-allowance unit
+	// at create — the refund-decision authority (an entitlement read at
+	// refund time would mis-handle a user who subscribed in between).
+	AllowanceConsumed bool `json:"-" dynamodbav:"allowance_consumed,omitempty"`
 	Provider        string                   `json:"-" dynamodbav:"analysis_provider,omitempty"`
 	Model           string                   `json:"-" dynamodbav:"analysis_model,omitempty"`
 	TokensIn        int                      `json:"-" dynamodbav:"tokens_in,omitempty"`

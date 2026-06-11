@@ -15,6 +15,7 @@ import (
 	"smachnogo/pkg/api/middleware"
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
+	"smachnogo/pkg/devicecheck"
 	"smachnogo/pkg/llm"
 	"smachnogo/pkg/logging"
 	"smachnogo/pkg/models"
@@ -25,13 +26,14 @@ import (
 // Scans wires the scan endpoints. Queue is nil in LOCAL_SYNC mode (the
 // processor runs inline); Processor is nil in deployed mode.
 type Scans struct {
-	Cfg       *config.Config
-	Store     *store.Store
-	S3        *awsx.S3
-	Queue     *awsx.SQS
-	Processor *scanproc.Processor
-	SSM       *awsx.SSM    // nil when SSM_PREFIX unset (local dev)
-	Analyzer  llm.Analyzer // dish refinement (text model)
+	Cfg         *config.Config
+	Store       *store.Store
+	S3          *awsx.S3
+	Queue       *awsx.SQS
+	Processor   *scanproc.Processor
+	SSM         *awsx.SSM           // nil when SSM_PREFIX unset (local dev)
+	Analyzer    llm.Analyzer        // dish refinement (text model)
+	DeviceCheck devicecheck.Checker // reinstall-abuse guard; Disabled until the .p8 exists
 }
 
 func nowUTC() time.Time { return time.Now().UTC() }
@@ -78,9 +80,55 @@ func (h *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	date := now.Format("2006-01-02")
 
-	// Quota first; idempotent retries of an existing scan skip consumption
-	// via the create-conditional below (we refund on ErrAlreadyExists).
+	// Idempotency BEFORE payment: a network-level retry of an existing scan
+	// must answer 201 from state, not 402/429 — the original create already
+	// paid. Concurrent same-id first-creates race past this read and settle
+	// at the create-conditional below.
+	if existing, err := h.Store.GetScan(r.Context(), userID, req.ScanID); err == nil {
+		h.respondCreate(w, r, existing)
+		return
+	} else if !errors.Is(err, store.ErrScanNotFound) {
+		writeInternal(w, r, err, "idempotency pre-check")
+		return
+	}
+
+	// Free-allowance gate FIRST (402-class), then daily quota (429-class) —
+	// a paywalled request must never strand an increment the worker won't
+	// see. The conditional write is the authoritative, race-safe decision.
+	ent := middleware.EntitlementFrom(r.Context())
+	freeConsumed := false
+	if ent.Enforced && !ent.Subscribed {
+		// First scan = allowance grant — the DeviceCheck moment. Errors and
+		// missing tokens fail OPEN (availability beats abuse-protection).
+		if ent.Profile.AllowanceStartedAt == 0 && h.DeviceCheck != nil {
+			used, derr := h.DeviceCheck.CheckAndSet(r.Context(), r.Header.Get("X-Device-Token"))
+			if derr != nil {
+				logging.From(r.Context()).Warn("devicecheck failed open", zap.Error(derr))
+			} else if used {
+				writePaywall(w, models.PaywallDeviceAlreadyUsed, 0)
+				return
+			}
+		}
+		window := time.Duration(h.Cfg.FreeWindowDays) * 24 * time.Hour
+		err := h.Store.ConsumeFreeScan(r.Context(), userID, h.Cfg.FreeScanAllowance, window, now)
+		var pw *store.PaywallError
+		if errors.As(err, &pw) {
+			writePaywall(w, pw.Reason, 0)
+			return
+		}
+		if err != nil {
+			writeInternal(w, r, err, "consume free allowance")
+			return
+		}
+		freeConsumed = true
+	}
+
 	if err := h.Store.Consume(r.Context(), userID, date, store.QuotaScans, h.Cfg.DailyScanCap, now.Unix()); err != nil {
+		if freeConsumed {
+			if uerr := h.Store.UnconsumeScanCounters(r.Context(), userID, date, false, true); uerr != nil {
+				logging.From(r.Context()).Warn("free-allowance handback failed", zap.Error(uerr))
+			}
+		}
 		if errors.Is(err, store.ErrQuotaExceeded) {
 			writeErr(w, http.StatusTooManyRequests, "RATE_LIMITED", "daily scan limit reached")
 			return
@@ -90,19 +138,22 @@ func (h *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scan := &models.Scan{
-		ScanID:    req.ScanID,
-		Status:    models.ScanStatusPendingUpload,
-		S3Key:     awsx.ScanKey(userID, req.ScanID),
-		CreatedAt: now,
-		UpdatedAt: now,
-		ExpiresAt: now.Add(h.Cfg.ScanResultTTL).Unix(),
+		ScanID:            req.ScanID,
+		Status:            models.ScanStatusPendingUpload,
+		S3Key:             awsx.ScanKey(userID, req.ScanID),
+		AllowanceConsumed: freeConsumed,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		ExpiresAt:         now.Add(h.Cfg.ScanResultTTL).Unix(),
 	}
 	err := h.Store.CreateScan(r.Context(), userID, scan)
 	if errors.Is(err, store.ErrAlreadyExists) {
-		// Retry of an existing create: hand back the counter we just took,
-		// then answer idempotently from current state.
-		if rerr := h.Store.RefundScanQuota(r.Context(), userID, req.ScanID, date); rerr != nil {
-			logging.From(r.Context()).Warn("idempotent-create refund failed", zap.Error(rerr))
+		// Retry of an existing create: hand back exactly the counters this
+		// duplicate took (direct decrements — the quota_refunded flag stays
+		// reserved for the scan's own terminal refund), then answer
+		// idempotently from current state.
+		if rerr := h.Store.UnconsumeScanCounters(r.Context(), userID, date, true, freeConsumed); rerr != nil {
+			logging.From(r.Context()).Warn("idempotent-create handback failed", zap.Error(rerr))
 		}
 		existing, gerr := h.Store.GetScan(r.Context(), userID, req.ScanID)
 		if gerr != nil {

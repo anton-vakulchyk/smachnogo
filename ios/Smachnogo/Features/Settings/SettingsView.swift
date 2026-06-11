@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var deleting = false
     @State private var deleted = false
     @State private var errorText: String?
+    @State private var showPaywall = false
 
     private let service = MealService()
 
@@ -38,6 +39,25 @@ struct SettingsView: View {
                     .disabled(deleting)
                 }
 
+                Section("Subscription") {
+                    if StoreService.shared.isSubscribed {
+                        Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
+                            Label("Manage subscription", systemImage: "creditcard")
+                        }
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label("Go unlimited", systemImage: "camera.viewfinder")
+                        }
+                    }
+                    Button {
+                        Task { await StoreService.shared.restore() }
+                    } label: {
+                        Label("Restore purchases", systemImage: "arrow.clockwise")
+                    }
+                }
+
                 Section("About the numbers") {
                     Text("Calories, macros and scores are AI estimates from your photos and descriptions — useful for tracking trends, not medical or dietary advice. Estimates can be off, especially for hidden ingredients. You can adjust any meal after saving.")
                         .font(.footnote)
@@ -45,15 +65,16 @@ struct SettingsView: View {
                 }
 
                 Section("Legal") {
-                    Link("Privacy policy", destination: URL(string: "https://smachnogo.app/privacy")!)
-                    Link("Terms of use", destination: URL(string: "https://smachnogo.app/terms")!)
-                    Link("Support", destination: URL(string: "https://smachnogo.app/support")!)
+                    Link("Privacy policy", destination: URL(string: "https://smachnogo.app/privacy.html")!)
+                    Link("Terms of use", destination: URL(string: "https://smachnogo.app/terms.html")!)
+                    Link("Support", destination: URL(string: "https://smachnogo.app/support.html")!)
                 }
 
                 if let errorText {
                     Section { Text(errorText).font(.footnote).foregroundStyle(.red) }
                 }
             }
+            .sheet(isPresented: $showPaywall) { PaywallView(reason: nil) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

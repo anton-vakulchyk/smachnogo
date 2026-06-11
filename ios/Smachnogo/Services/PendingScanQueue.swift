@@ -18,6 +18,7 @@ final class PendingScanQueue {
         case awaitingResult     // processing server-side; poll
         case awaitingSelection  // READY with food — user must pick dishes
         case notFood            // READY, no food — informational, dismissible
+        case paywalled          // 402 — photo kept; resumes after subscribing
         case failed             // terminal failure — retry or discard
     }
 
@@ -96,7 +97,19 @@ final class PendingScanQueue {
     }
 
     func resumeAll() {
-        for e in entries where ![.awaitingSelection, .notFood, .failed].contains(e.step) {
+        // Paywalled entries don't auto-resume on connectivity — each retry
+        // is a guaranteed 402 until the user subscribes (retryPaywalled).
+        for e in entries where ![.awaitingSelection, .notFood, .failed, .paywalled].contains(e.step) {
+            advance(e.scanId)
+        }
+    }
+
+    /// After a purchase/restore: paywalled photos go back through the
+    /// pipeline — the camera was paid for, nothing the user shot is lost.
+    func retryPaywalled() {
+        for e in entries where e.step == .paywalled {
+            guard var entry = entry(e.scanId) else { continue }
+            update(&entry, .needsCreate)
             advance(e.scanId)
         }
     }
@@ -150,7 +163,9 @@ final class PendingScanQueue {
         } catch {
             // Transport/offline errors keep the current step (resume retries
             // it); only mark failed for explicit server rejections.
-            if case let APIError.http(status, _, message) = error, status >= 400, status != 408, status != 429 {
+            if case APIError.paywall = error {
+                update(&entry, .paywalled) // photo stays — resumes after purchase
+            } else if case let APIError.http(status, _, message) = error, status >= 400, status != 408, status != 429 {
                 entry.failureMessage = message
                 update(&entry, .failed)
             }

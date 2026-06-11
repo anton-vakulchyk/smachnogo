@@ -1,7 +1,8 @@
-# App Store Readiness — M6.5 Checklist
+# App Store Readiness — M6.5/M7 Checklist
 
-Status as of 2026-06-11. This gates the first external TestFlight build.
-Split: what's already done in code/infra vs. what only Anton can do.
+Status as of 2026-06-11 (updated after M7 monetization). This gates the
+first external TestFlight build. Split: what's already done in code/infra
+vs. what only Anton can do.
 
 ---
 
@@ -59,13 +60,37 @@ Not collected: name, email, phone, precise location (GPS is stripped on-device),
 5. **Sentry project** (or decide to defer): create project, hand me the DSN — I'll add the SPM package and wire it. Plan requires crash reporting before strangers run the app. Update privacy labels (+ Crash Data) when added.
 6. **Confirm the SNS subscription email** sent to anton@vakulchyk.com (prod + dev alarm topics are unconfirmed until clicked — alarms go nowhere otherwise).
 
-## 🧑 Anton — required before the paywall launch (M7)
+## ✅ Done in M7 (monetization — built & verified)
+
+| Item | Notes |
+|---|---|
+| Entitlement layer live in BOTH envs (`ENTITLEMENT_MODE=enforce`) | 10 free scans / 7 days → 402 PAYWALL w/ reason; subscriber daily cap 20; text diary free forever |
+| Failed/not-food scans refund BOTH counters | verified through the real deployed worker |
+| StoreKit 2 server side | `POST /v1/subscriptions/receipt` (JWS verified vs Apple root via go-iap), webhook w/ notificationUUID dedup + signedDate ordering + appAccountToken attribution + restore/transfer (latest claim wins) — full lifecycle e2e'd on dev (subscribe → scan → expire → 402, replay + out-of-order dropped) |
+| Prod webhook rejects unverified JWS (401) | dev runs `insecure_dev` decode for Xcode-signed test transactions; config refuses that mode in prod |
+| iOS paywall | PaywallView (displayPrice only, restore, full auto-renew disclosure, legal links, product-failure state), scans-remaining chip, paywalled scans park (photo kept) and auto-resume on subscribe — simulator-verified incl. webhook-driven unlock |
+| Local StoreKit testing config | `ios/StoreKit/Smachnogo.storekit`, attached to the Xcode scheme (products mirror ASC) |
+| DeviceCheck seam | `X-Device-Token` sent by app, server checker fails open; real Apple API call lands when the key exists (below) |
+| Model bake-off + eval harness | `tests/eval` (5 fixtures × N models). 2026-06-11: gemini-2.5-flash 5/5 $0.0031/scan (default, kept); gemini-3.1-flash-lite 5/5 $0.0013 2.8s (cost-down candidate — needs bigger fixture set); 3-flash-preview/3.5-flash had latency spikes; Opus/Sonnet pending Anthropic keys |
+| CI workflow | `.github/workflows/ci.yml` (test→build; manual deploy via OIDC role — see Anton list) |
+
+## 🧑 Anton — required before the paywall launch (M7 → live)
 
 7. **Paid Apps Agreement** + banking/tax in ASC.
 8. **Small Business Program** enrollment — **≥1 fiscal month before paywall launch** (margin math assumes 15%; un-enrolled = 30% and $6.99 nets ~$4.89).
 9. **EU DSA trader declaration** in ASC (or accept EU delisting).
 10. **Age rating questionnaire** (expect 4+; no objectionable content).
-11. **Subscription products** in ASC: $6.99/mo + $39.99/yr with 7-day trial on annual.
+11. **Subscription products in ASC — IDs must match the code exactly:**
+    - Group: `Premium`
+    - `smachnogo.premium.monthly` — $6.99/month
+    - `smachnogo.premium.annual` — $39.99/year + **7-day free introductory offer**
+12. **App Store Server Notifications V2 URL** in ASC:
+    - Production: `https://b37hzro1uk.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore`
+    - Sandbox: `https://dy9kj15vph.execute-api.us-east-1.amazonaws.com/v1/webhooks/appstore` (dev)
+13. **Enable Billing Grace Period** in ASC (off by default — without it a card hiccup hard-locks a paying user). **Leave Family Sharing OFF** (irreversible once on).
+14. **DeviceCheck key**: Certificates → Keys → create a DeviceCheck `.p8`; hand me key ID + team ID + the file → I implement the Apple API caller and flip `DEVICECHECK_ENABLED` (until then reinstall abuse is bounded by Keychain persistence only).
+15. **One Xcode-launched run** (Cmd-R) to exercise the StoreKit purchase sheet against `Smachnogo.storekit` — simctl launches can't inject the config (server flow already verified). Sandbox purchase test follows once ASC products exist.
+16. *(optional)* GitHub repo + AWS OIDC deploy role + `AWS_DEPLOY_ROLE_ARN` secret to activate CI deploys.
 
 ## 🔐 Anton — security follow-ups (from the build, do these soon)
 

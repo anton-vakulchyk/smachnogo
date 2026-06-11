@@ -12,6 +12,7 @@ struct ScanFlowView: View {
     @State private var queue = PendingScanQueue.shared
     @State private var job: ScanJob?
     @State private var fetchingJob = false
+    @State private var showPaywall = false
     @Environment(\.dismiss) private var dismiss
 
     private var entry: PendingScanQueue.Entry? {
@@ -47,7 +48,7 @@ struct ScanFlowView: View {
 
     private var dismissLabel: String {
         switch entry?.step {
-        case .awaitingSelection, .notFood, .failed, nil: return "Close"
+        case .awaitingSelection, .notFood, .failed, .paywalled, nil: return "Close"
         default: return "Continue in background"
         }
     }
@@ -80,6 +81,22 @@ struct ScanFlowView: View {
                     queue.discard(scanId)
                     dismiss()
                 }
+            }
+        case .paywalled:
+            ContentUnavailableView {
+                Label("Subscribe to scan", systemImage: "lock.fill")
+            } description: {
+                Text("Your photo is saved and scans automatically once you subscribe. The text diary stays free.")
+            } actions: {
+                Button("See plans") { showPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                Button("Discard photo", role: .destructive) {
+                    queue.discard(scanId)
+                    dismiss()
+                }
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView(reason: "scans_exhausted")
             }
         case .failed:
             ContentUnavailableView {

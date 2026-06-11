@@ -4,6 +4,19 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+# Explicit scheme so Debug runs carry the local StoreKit configuration —
+# sandbox-free purchase testing in the simulator (products mirror ASC).
+schemes:
+  Smachnogo:
+    build:
+      targets:
+        Smachnogo: all
+    run:
+      config: Debug
+      storeKitConfiguration: StoreKit/Smachnogo.storekit
+    archive:
+      config: Release
+
 configFiles:
   Debug: Configs/Debug.xcconfig
   Release: Configs/Release.xcconfig

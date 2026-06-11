@@ -69,7 +69,7 @@ func (h *Scans) Refine(w http.ResponseWriter, r *http.Request) {
 
 	// Estimates quota covers refinement (same cheap text model).
 	now := nowUTC()
-	if err := h.Store.Consume(r.Context(), userID, now.Format("2006-01-02"), store.QuotaEstimates, h.Cfg.DailyEstimateCap, now.Unix()); err != nil {
+	if err := h.Store.Consume(r.Context(), userID, now.Format("2006-01-02"), store.QuotaEstimates, estimateCap(r, h.Cfg.DailyEstimateCap, h.Cfg.DailyEstimateCapSub), now.Unix()); err != nil {
 		if errors.Is(err, store.ErrQuotaExceeded) {
 			writeErr(w, http.StatusTooManyRequests, "RATE_LIMITED", "daily estimate limit reached")
 			return

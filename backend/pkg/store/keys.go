@@ -14,11 +14,23 @@ const (
 	skMealPrefix  = "MEAL#"
 	skScanPrefix  = "SCAN#"
 	skQuotaPrefix = "QUOTA#"
+	pkTxnPrefix   = "TXN#"   // Apple originalTransactionId → owning user
+	pkNotifPrefix = "NOTIF#" // App Store notificationUUID dedup
+	skMeta        = "META"
 )
 
 func UserPK(userID string) string { return pkUserPrefix + userID }
 
 func ProfileSK() string { return skProfile }
+
+// TxnPK keys the originalTransactionId→user ownership item: one active user
+// per Apple subscription, latest claim wins (restore/device transfer).
+func TxnPK(originalTransactionID string) string { return pkTxnPrefix + originalTransactionID }
+
+// NotifPK keys the webhook dedup item (duplicate deliveries are normal).
+func NotifPK(notificationUUID string) string { return pkNotifPrefix + notificationUUID }
+
+func MetaSK() string { return skMeta }
 
 func MealSK(date, mealID string) string { return skMealPrefix + date + "#" + mealID }
 

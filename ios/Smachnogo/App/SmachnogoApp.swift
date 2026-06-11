@@ -5,6 +5,7 @@ struct SmachnogoApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView()
+                .task { StoreService.shared.start() }
         }
     }
 }

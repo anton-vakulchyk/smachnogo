@@ -50,3 +50,15 @@ variable "llm_model_text" {
   type    = string
   default = "gemini-3.1-flash-lite"
 }
+
+variable "entitlement_mode" {
+  description = "enforce = free-allowance paywall live; off = everyone full access"
+  type        = string
+  default     = "enforce"
+}
+
+variable "appstore_verify_mode" {
+  description = "full = Apple-root JWS verification; insecure_dev = decode-only (Xcode StoreKit testing, refused by the app in prod)"
+  type        = string
+  default     = "full"
+}

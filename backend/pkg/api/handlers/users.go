@@ -9,16 +9,51 @@ import (
 
 	"smachnogo/pkg/api/middleware"
 	"smachnogo/pkg/awsx"
+	"smachnogo/pkg/config"
 	"smachnogo/pkg/logging"
 	"smachnogo/pkg/models"
 	"smachnogo/pkg/store"
 )
 
-// Users: account deletion (App Store 5.1.1(v) / GDPR) and data export.
+// Users: account deletion (App Store 5.1.1(v) / GDPR), data export, and the
+// billing-state endpoint behind the scans-remaining indicator.
 type Users struct {
+	Cfg     *config.Config
 	Store   *store.Store
 	S3      *awsx.S3
 	Cognito *awsx.Cognito // nil in static-auth local dev — DDB+S3 cascade still runs
+}
+
+// Me: GET /v1/users/me → {entitlement, scans_remaining, allowance_ends_at}.
+// Powers the scans-remaining indicator and proactive paywall moments — the
+// client never has to probe-by-scanning. Subscribers report the daily cap's
+// remainder and a null allowance_ends_at.
+func (h *Users) Me(w http.ResponseWriter, r *http.Request) {
+	ent := middleware.EntitlementFrom(r.Context())
+	now := time.Now().UTC()
+
+	resp := struct {
+		Entitlement    models.Entitlement `json:"entitlement"`
+		ScansRemaining int                `json:"scans_remaining"`
+		AllowanceEnds  *time.Time         `json:"allowance_ends_at"`
+	}{Entitlement: ent.Profile.Ent()}
+
+	if !ent.Enforced || ent.Subscribed {
+		used, err := h.Store.GetDailyScans(r.Context(), middleware.UserID(r.Context()), now.Format("2006-01-02"))
+		if err != nil {
+			writeInternal(w, r, err, "read daily scans")
+			return
+		}
+		resp.ScansRemaining = max(0, h.Cfg.DailyScanCap-used)
+	} else {
+		window := time.Duration(h.Cfg.FreeWindowDays) * 24 * time.Hour
+		remaining, _ := ent.Profile.FreeAllowance(h.Cfg.FreeScanAllowance, window, now)
+		resp.ScansRemaining = remaining
+		if ends := ent.Profile.AllowanceEndsAt(window); !ends.IsZero() {
+			resp.AllowanceEnds = &ends
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // DeleteMe: DELETE /v1/users/me — full cascade: every DDB item in the

@@ -15,6 +15,7 @@ locals {
     DAILY_SCAN_CAP     = tostring(var.daily_scan_cap)
     DAILY_ESTIMATE_CAP = tostring(var.daily_estimate_cap)
     SCANS_ENABLED      = "true" # fallback only — the SSM parameter wins (apply can't un-kill)
+    ENTITLEMENT_MODE   = var.entitlement_mode
   }
 }
 
@@ -31,8 +32,9 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = merge(local.common_env, {
-      ROLE              = "api"
-      AUTH_MODE         = var.auth_mode
+      ROLE                 = "api"
+      AUTH_MODE            = var.auth_mode
+      APPSTORE_VERIFY_MODE = var.appstore_verify_mode
       COGNITO_POOL_ID   = aws_cognito_user_pool.main.id
       COGNITO_CLIENT_ID = aws_cognito_user_pool_client.ios.id
     })

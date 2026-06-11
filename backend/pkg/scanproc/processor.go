@@ -214,7 +214,7 @@ func (p *Processor) fail(ctx context.Context, log *zap.Logger, userID, scanID st
 // date = the quota day consumed at create (scan creation date, UTC).
 func (p *Processor) refund(ctx context.Context, log *zap.Logger, userID, scanID string, scan *models.Scan) {
 	date := scan.CreatedAt.UTC().Format("2006-01-02")
-	if err := p.Store.RefundScanQuota(ctx, userID, scanID, date); err != nil {
+	if err := p.Store.RefundScanQuota(ctx, userID, scanID, date, scan.AllowanceConsumed); err != nil {
 		// Refund failure must not fail the scan — log loudly instead.
 		log.Error("quota refund failed", zap.Error(err))
 	}

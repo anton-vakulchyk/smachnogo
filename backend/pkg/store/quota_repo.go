@@ -55,9 +55,11 @@ func (s *Store) Consume(ctx context.Context, userID, date string, kind QuotaKind
 // refundTransactItems returns the transaction pieces for a scan-quota refund:
 // (1) flip quota_refunded on the scan (the idempotency guard — only the
 // winner of this conditional decrements anything), (2) decrement the day
-// counter. M7 appends a free_scans_used decrement to the same transaction.
-func (s *Store) refundTransactItems(userID, scanID, date string) []types.TransactWriteItem {
-	return []types.TransactWriteItem{
+// counter, (3) when the scan consumed a free-allowance unit, hand that back
+// too — two counters, one flag, one atomic transaction. A new user's fumbled
+// attempts must not eat their 10-scan conversion window.
+func (s *Store) refundTransactItems(userID, scanID, date string, allowanceConsumed bool) []types.TransactWriteItem {
+	items := []types.TransactWriteItem{
 		{
 			Update: &types.Update{
 				TableName: &s.table,
@@ -89,14 +91,29 @@ func (s *Store) refundTransactItems(userID, scanID, date string) []types.Transac
 			},
 		},
 	}
+	if allowanceConsumed {
+		items = append(items, types.TransactWriteItem{
+			Update: &types.Update{
+				TableName:           &s.table,
+				Key:                 s.profileKey(userID),
+				UpdateExpression:    aws.String("ADD free_scans_used :neg"),
+				ConditionExpression: aws.String("attribute_exists(PK) AND free_scans_used > :zero"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":neg":  &types.AttributeValueMemberN{Value: "-1"},
+					":zero": &types.AttributeValueMemberN{Value: "0"},
+				},
+			},
+		})
+	}
+	return items
 }
 
 // RefundScanQuota refunds one scan consumption (FAILED or not-food
 // terminal states). Idempotent: a second call loses the quota_refunded
 // condition and is a no-op.
-func (s *Store) RefundScanQuota(ctx context.Context, userID, scanID, date string) error {
+func (s *Store) RefundScanQuota(ctx context.Context, userID, scanID, date string, allowanceConsumed bool) error {
 	_, err := s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: s.refundTransactItems(userID, scanID, date),
+		TransactItems: s.refundTransactItems(userID, scanID, date, allowanceConsumed),
 	})
 	if err != nil {
 		var canceled *types.TransactionCanceledException

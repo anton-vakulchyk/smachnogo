@@ -50,6 +50,19 @@ actor CognitoTokenProvider: TokenProvider {
         accessExpiry = .distantPast
     }
 
+    /// Cognito sub from the access token — purchases pass it to Apple as
+    /// appAccountToken so webhook notifications attribute to this account.
+    func userID() async -> String? {
+        guard let token = try? await token() else { return nil }
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while payload.count % 4 != 0 { payload += "=" }
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["sub"] as? String
+    }
+
     // MARK: - Identity
 
     private func ensureIdentity() async throws -> KeychainStore.Identity {

@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"smachnogo/pkg/logging"
+	"smachnogo/pkg/models"
 )
 
 type ctxKeyUserID struct{}
@@ -66,13 +67,55 @@ func StaticAuth(token, userID string) func(http.Handler) http.Handler {
 	}
 }
 
-// Entitlement is the billing seam — allow-all until M7 implements the
-// free-allowance/subscription check here (BEFORE quota consumption, so a
-// paywalled request never strands an un-refundable counter increment).
-func Entitlement() func(http.Handler) http.Handler {
+// ProfileGetter is the slice of the store the entitlement middleware needs.
+type ProfileGetter interface {
+	GetProfile(ctx context.Context, userID string) (*models.Profile, error)
+}
+
+type ctxKeyEntitlement struct{}
+
+// EntitlementInfo rides the context from the middleware to handlers, so the
+// billing decision is read once per request. Authoritative *enforcement*
+// stays in the conditional writes (ConsumeFreeScan) — this is the routing
+// signal: which quota path, which caps, what /users/me reports.
+type EntitlementInfo struct {
+	Enforced   bool // false when ENTITLEMENT_MODE=off
+	Subscribed bool // entitlement permits scanning beyond the free allowance
+	Profile    *models.Profile
+}
+
+func EntitlementFrom(ctx context.Context) EntitlementInfo {
+	v, ok := ctx.Value(ctxKeyEntitlement{}).(EntitlementInfo)
+	if !ok {
+		// Route not wrapped — treat as unenforced rather than failing open
+		// on a paid path silently: scans/estimate routes are always wrapped.
+		return EntitlementInfo{Enforced: false, Subscribed: true, Profile: &models.Profile{}}
+	}
+	return v
+}
+
+// Entitlement loads the billing profile into context for routes that need
+// it (scan create, estimates, refine, /users/me). Mounted per-route — a
+// profile read on every request would be waste. The 402 itself is issued by
+// the scan-create handler AFTER validation, via the atomic ConsumeFreeScan
+// (BEFORE daily-quota consumption, so a paywalled request never strands an
+// un-refundable increment).
+func Entitlement(profiles ProfileGetter, mode string) func(http.Handler) http.Handler {
+	enforced := mode == "enforce"
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
+			info := EntitlementInfo{Enforced: enforced, Subscribed: !enforced, Profile: &models.Profile{}}
+			if enforced {
+				p, err := profiles.GetProfile(r.Context(), UserID(r.Context()))
+				if err != nil {
+					logging.From(r.Context()).Error("entitlement profile read", zap.Error(err))
+					writeJSONError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+					return
+				}
+				info.Profile = p
+				info.Subscribed = p.Ent().Subscribed()
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyEntitlement{}, info)))
 		})
 	}
 }

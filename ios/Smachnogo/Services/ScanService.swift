@@ -1,5 +1,17 @@
 import Foundation
 import UIKit
+import DeviceCheck
+
+/// One DCDevice token per launch — the reinstall-abuse signal sent with
+/// scan creates. Simulators/unsupported devices yield nil (server fails
+/// open by design).
+enum DeviceToken {
+    private static let cached = Task<String?, Never> {
+        guard DCDevice.current.isSupported else { return nil }
+        return (try? await DCDevice.current.generateToken())?.base64EncodedString()
+    }
+    static func current() async -> String? { await cached.value }
+}
 
 /// Drives the scan pipeline: create → S3 PUT → uploaded → poll. Polling
 /// lives HERE (not in views) so it survives view dismissal.
@@ -12,7 +24,11 @@ struct ScanService: Sendable {
     }
 
     func createScan(scanId: String = UUID().uuidString.lowercased()) async throws -> CreateResult {
-        let resp: ScanCreateResponse = try await api.post("/v1/scans", body: ["scan_id": scanId])
+        var headers: [String: String] = [:]
+        if let token = await DeviceToken.current() {
+            headers["X-Device-Token"] = token
+        }
+        let resp: ScanCreateResponse = try await api.post("/v1/scans", body: ["scan_id": scanId], headers: headers)
         return CreateResult(scanId: resp.scanId, uploadURL: resp.upload?.url)
     }
 

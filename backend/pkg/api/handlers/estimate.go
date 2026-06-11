@@ -40,7 +40,7 @@ func (h *Meals) Estimate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	if err := h.Store.Consume(r.Context(), userID, now.Format("2006-01-02"), store.QuotaEstimates, h.Cfg.DailyEstimateCap, now.Unix()); err != nil {
+	if err := h.Store.Consume(r.Context(), userID, now.Format("2006-01-02"), store.QuotaEstimates, estimateCap(r, h.Cfg.DailyEstimateCap, h.Cfg.DailyEstimateCapSub), now.Unix()); err != nil {
 		if errors.Is(err, store.ErrQuotaExceeded) {
 			writeErr(w, http.StatusTooManyRequests, "RATE_LIMITED", "daily estimate limit reached")
 			return
@@ -71,6 +71,15 @@ func (h *Meals) Estimate(w http.ResponseWriter, r *http.Request) {
 		"items":       emptyIfNil(est.Items),
 		"totals":      est.Totals(),
 	})
+}
+
+// estimateCap: subscribers get the higher text-estimate cap; the free cap
+// keeps the free-forever diary genuinely free without becoming a token sink.
+func estimateCap(r *http.Request, free, subscribed int) int {
+	if middleware.EntitlementFrom(r.Context()).Subscribed {
+		return subscribed
+	}
+	return free
 }
 
 func clampScore(s int) int {

@@ -19,6 +19,8 @@ struct DayView: View {
     @State private var showSettings = false
     @State private var showManualEntry = false
     @State private var queue = PendingScanQueue.shared
+    @State private var store = StoreService.shared
+    @State private var showPaywall = false
 
     struct ActiveScan: Identifiable {
         let scanId: String
@@ -34,6 +36,7 @@ struct DayView: View {
         NavigationStack {
             VStack(spacing: 8) {
                 CalendarStrip(selectedDate: $selectedDate)
+                scansRemainingChip
                 content
             }
             .navigationTitle(navTitle)
@@ -56,7 +59,16 @@ struct DayView: View {
             }
         }
         .task(id: dayKey) { await load() }
-        .task { queue.resumeAll() }
+        .task {
+            queue.resumeAll()
+            await store.refreshServerState()
+            // Subscription activated elsewhere (restore on another device,
+            // webhook) — un-park photos that were waiting on the paywall.
+            if store.isSubscribed { queue.retryPaywalled() }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(reason: store.me.flatMap { $0.scansRemaining <= 0 ? "scans_exhausted" : nil })
+        }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
@@ -108,6 +120,29 @@ struct DayView: View {
 
     private var navTitle: String {
         Calendar.current.isDateInToday(selectedDate) ? "Today" : selectedDate.formatted(.dateTime.day().month())
+    }
+
+    /// Free-tier camera allowance, always visible while it's the scarce
+    /// resource. Tapping opens the paywall — the proactive moment, no
+    /// probing-by-scanning needed.
+    @ViewBuilder
+    private var scansRemainingChip: some View {
+        if !store.isSubscribed, let me = store.me, !me.subscribed {
+            Button { showPaywall = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "camera")
+                    Text(me.scansRemaining > 0
+                         ? "\(me.scansRemaining) free scan\(me.scansRemaining == 1 ? "" : "s") left"
+                         : "Free scans used — go unlimited")
+                    Image(systemName: "chevron.right").font(.caption2)
+                }
+                .font(.footnote.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(me.scansRemaining > 0 ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.tint.opacity(0.15))))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     @ViewBuilder
@@ -324,6 +359,7 @@ struct PendingScanRow: View {
         switch entry.step {
         case .awaitingSelection: return "Ready — pick your dishes"
         case .notFood: return "No food found"
+        case .paywalled: return "Waiting for subscription"
         case .failed: return "Scan failed"
         default: return "Analyzing…"
         }
@@ -333,6 +369,7 @@ struct PendingScanRow: View {
         switch entry.step {
         case .awaitingSelection: return "Tap to review and save"
         case .notFood: return "Tap to dismiss"
+        case .paywalled: return "Your photo is saved — subscribe to scan it"
         case .failed: return entry.failureMessage ?? "Tap to retry or discard"
         default: return "Keeps going even if you close the app"
         }
@@ -345,6 +382,8 @@ struct PendingScanRow: View {
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        case .paywalled:
+            Image(systemName: "lock.fill").foregroundStyle(.tint)
         case .notFood:
             Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
         default:

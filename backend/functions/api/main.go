@@ -15,6 +15,7 @@ import (
 	"smachnogo/pkg/api/middleware"
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
+	"smachnogo/pkg/devicecheck"
 	"smachnogo/pkg/llm"
 	// Anthropic provider disabled until keys exist (owner decision 2026-06-10);
 	// re-enable by restoring the import: _ "smachnogo/pkg/llm/anthropic"
@@ -86,7 +87,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("llm init", zap.Error(err))
 	}
-	scansH := &handlers.Scans{Cfg: cfg, Store: st, S3: s3c, SSM: ssmClient, Analyzer: analyzer}
+	scansH := &handlers.Scans{
+		Cfg: cfg, Store: st, S3: s3c, SSM: ssmClient, Analyzer: analyzer,
+		// Real DeviceCheck lands when the Apple .p8 key exists (readiness doc).
+		DeviceCheck: devicecheck.Disabled{},
+	}
 	if cfg.LocalSync {
 		scansH.Processor = &scanproc.Processor{
 			Store: st, S3: s3c, Analyzer: analyzer,
@@ -96,17 +101,19 @@ func main() {
 		scansH.Queue = awsx.NewSQS(awsCfg, cfg.QueueURL)
 	}
 
-	usersH := &handlers.Users{Store: st, S3: s3c}
+	usersH := &handlers.Users{Cfg: cfg, Store: st, S3: s3c}
 	if cfg.CognitoPoolID != "" {
 		usersH.Cognito = awsx.NewCognito(awsCfg, cfg.CognitoPoolID)
 	}
 	router := api.NewRouter(api.Deps{
-		Cfg:     cfg,
-		Logger:  logger,
-		Scans:   scansH,
-		Meals:   &handlers.Meals{Cfg: cfg, Store: st, Analyzer: analyzer},
-		Users:   usersH,
-		Cognito: cognitoAuth,
+		Cfg:           cfg,
+		Logger:        logger,
+		Scans:         scansH,
+		Meals:         &handlers.Meals{Cfg: cfg, Store: st, Analyzer: analyzer},
+		Users:         usersH,
+		Subscriptions: handlers.NewSubscriptions(cfg, st),
+		Store:         st,
+		Cognito:       cognitoAuth,
 	})
 
 	logger.Info("api starting",
