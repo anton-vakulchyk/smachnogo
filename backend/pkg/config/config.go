@@ -23,6 +23,8 @@ type Config struct {
 	AuthMode          string // static | cognito
 	StaticBearerToken string
 	StaticUserID      string
+	CognitoPoolID     string
+	CognitoClientID   string
 
 	LLMProvider     string
 	LLMModelVision  string
@@ -58,6 +60,8 @@ func Load() (*Config, error) {
 		AuthMode:          getenv("AUTH_MODE", "static"),
 		StaticBearerToken: os.Getenv("STATIC_BEARER_TOKEN"),
 		StaticUserID:      getenv("STATIC_USER_ID", "8a2fb1f4-3c5e-4b9a-9d27-6e1f0c4a7b53"),
+		CognitoPoolID:     os.Getenv("COGNITO_POOL_ID"),
+		CognitoClientID:   os.Getenv("COGNITO_CLIENT_ID"),
 
 		LLMProvider:     getenv("LLM_PROVIDER", "gemini"),
 		LLMVisionPolicy: getenv("LLM_VISION_POLICY", "single"),

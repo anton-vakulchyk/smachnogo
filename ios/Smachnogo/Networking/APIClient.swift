@@ -2,10 +2,14 @@ import Foundation
 
 protocol TokenProvider: Sendable {
     func token() async throws -> String
+    func invalidate() async
 }
 
-/// M1: the dev static token from xcconfig. M2 swaps in CognitoTokenProvider
-/// (Keychain creds + refresh) — nothing else in the app changes.
+extension TokenProvider {
+    func invalidate() async {}
+}
+
+/// Dev static token from xcconfig (local API in static mode).
 struct StaticTokenProvider: TokenProvider {
     func token() async throws -> String {
         let t = AppConfig.bearerToken
@@ -13,6 +17,16 @@ struct StaticTokenProvider: TokenProvider {
         return t
     }
 }
+
+/// One shared provider for the process: Cognito when build config carries
+/// pool credentials, otherwise the static dev token.
+let sharedTokenProvider: TokenProvider = {
+    if let c = AppConfig.cognito {
+        return CognitoTokenProvider(region: c.region, clientID: c.clientID,
+                                    username: c.username, password: c.password)
+    }
+    return StaticTokenProvider()
+}()
 
 enum APIError: Error, LocalizedError {
     case noToken
@@ -37,7 +51,7 @@ private struct ErrorEnvelope: Codable {
 
 struct APIClient: Sendable {
     var baseURL: URL = AppConfig.apiBaseURL
-    var tokenProvider: TokenProvider = StaticTokenProvider()
+    var tokenProvider: TokenProvider = sharedTokenProvider
 
     func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         try await request(path, method: "GET", query: query, body: Optional<Int>.none)
@@ -48,6 +62,19 @@ struct APIClient: Sendable {
     }
 
     private func request<T: Decodable, B: Encodable>(
+        _ path: String, method: String, query: [URLQueryItem] = [], body: B?
+    ) async throws -> T {
+        // One transparent retry on 401: invalidate the cached token and let
+        // the provider mint/refresh a fresh one.
+        do {
+            return try await requestOnce(path, method: method, query: query, body: body)
+        } catch let APIError.http(status, _, _) where status == 401 {
+            await tokenProvider.invalidate()
+            return try await requestOnce(path, method: method, query: query, body: body)
+        }
+    }
+
+    private func requestOnce<T: Decodable, B: Encodable>(
         _ path: String, method: String, query: [URLQueryItem] = [], body: B?
     ) async throws -> T {
         var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!

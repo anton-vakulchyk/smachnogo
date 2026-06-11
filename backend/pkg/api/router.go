@@ -14,10 +14,11 @@ import (
 )
 
 type Deps struct {
-	Cfg    *config.Config
-	Logger *zap.Logger
-	Scans  *handlers.Scans
-	Meals  *handlers.Meals
+	Cfg     *config.Config
+	Logger  *zap.Logger
+	Scans   *handlers.Scans
+	Meals   *handlers.Meals
+	Cognito *middleware.CognitoAuth // required when AUTH_MODE=cognito
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -34,8 +35,12 @@ func NewRouter(d Deps) http.Handler {
 		switch d.Cfg.AuthMode {
 		case "static":
 			v1.Use(middleware.StaticAuth(d.Cfg.StaticBearerToken, d.Cfg.StaticUserID))
+		case "cognito":
+			if d.Cognito == nil {
+				panic("AUTH_MODE=cognito requires a constructed CognitoAuth")
+			}
+			v1.Use(d.Cognito.Middleware())
 		default:
-			// M2 adds AUTH_MODE=cognito here (jwx + cached JWKS).
 			panic("unsupported AUTH_MODE: " + d.Cfg.AuthMode)
 		}
 		v1.Use(middleware.Entitlement())

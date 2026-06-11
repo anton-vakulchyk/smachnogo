@@ -31,4 +31,8 @@ targets:
       properties:
         APIBaseURL: $(API_BASE_URL)
         APIBearerToken: $(API_BEARER_TOKEN)
+        CognitoRegion: $(COGNITO_REGION)
+        CognitoClientID: $(COGNITO_CLIENT_ID)
+        CognitoDevUsername: $(COGNITO_DEV_USERNAME)
+        CognitoDevPassword: $(COGNITO_DEV_PASSWORD)
         ITSAppUsesNonExemptEncryption: false

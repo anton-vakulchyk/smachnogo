@@ -15,6 +15,7 @@
 		7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86B973FC51869E11CA624FB /* DayView.swift */; };
 		8C3E7712699A3F07E0363C1F /* CameraPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BCFCED427A656CC6A46BF7 /* CameraPicker.swift */; };
 		B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */; };
+		C147A86EE34EA87A96EC9965 /* CognitoTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */; };
 		C14D4F0A582906B24B0689FD /* ScanResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */; };
 		C2BFC3EC0FD6ADF37A8A83D2 /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1DB363C51F11ED5113A562 /* ScanFlowView.swift */; };
 		DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747AA4CB7B1F22E68EE19415 /* APIClient.swift */; };
@@ -32,6 +33,7 @@
 		5B89C606EBEF0DA99335F769 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		747AA4CB7B1F22E68EE19415 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		764E5BDEF6E503F035A69BE9 /* DateUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateUtil.swift; sourceTree = "<group>"; };
+		81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CognitoTokenProvider.swift; sourceTree = "<group>"; };
 		8BC8A1C67222242B2EBF5953 /* ScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanService.swift; sourceTree = "<group>"; };
 		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Smachnogo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -47,6 +49,7 @@
 			isa = PBXGroup;
 			children = (
 				747AA4CB7B1F22E68EE19415 /* APIClient.swift */,
+				81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -215,6 +218,7 @@
 				DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */,
 				B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */,
 				8C3E7712699A3F07E0363C1F /* CameraPicker.swift in Sources */,
+				C147A86EE34EA87A96EC9965 /* CognitoTokenProvider.swift in Sources */,
 				F727493C36B6D453179969EB /* DateUtil.swift in Sources */,
 				7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */,
 				469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */,

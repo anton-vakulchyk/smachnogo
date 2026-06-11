@@ -6,16 +6,31 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 URL="http://localhost:8090"
 IMAGE="tests/fixtures/two_plates.jpg"
+AUTH="static"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --url) URL=$2; shift 2 ;;
     --image) IMAGE=$2; shift 2 ;;
+    --auth) AUTH=$2; shift 2 ;;
     *) echo "unknown arg $1" >&2; exit 2 ;;
   esac
 done
 
-TOKEN=$(grep '^STATIC_BEARER_TOKEN=' secrets/dev.env | cut -d= -f2)
-[ -n "$TOKEN" ] || { echo "no STATIC_BEARER_TOKEN in secrets/dev.env" >&2; exit 1; }
+if [ "$AUTH" = "cognito" ]; then
+  CLIENT_ID=$(grep '^COGNITO_CLIENT_ID=' secrets/dev.env | cut -d= -f2)
+  CUSER=$(grep '^COGNITO_DEV_USERNAME=' secrets/dev.env | cut -d= -f2)
+  CPASS=$(grep '^COGNITO_DEV_PASSWORD=' secrets/dev.env | cut -d= -f2)
+  [ -n "$CLIENT_ID" ] || { echo "no COGNITO_* in secrets/dev.env — run scripts/create-dev-user.sh" >&2; exit 1; }
+  TOKEN=$(AWS_PROFILE="${AWS_PROFILE:-smachnogo}" aws cognito-idp initiate-auth \
+    --auth-flow USER_PASSWORD_AUTH --client-id "$CLIENT_ID" \
+    --auth-parameters "USERNAME=$CUSER,PASSWORD=$CPASS" \
+    --query 'AuthenticationResult.AccessToken' --output text)
+  [ "$TOKEN" != "None" ] && [ -n "$TOKEN" ] || { echo "cognito auth failed" >&2; exit 1; }
+  echo "auth: cognito access token obtained"
+else
+  TOKEN=$(grep '^STATIC_BEARER_TOKEN=' secrets/dev.env | cut -d= -f2)
+  [ -n "$TOKEN" ] || { echo "no STATIC_BEARER_TOKEN in secrets/dev.env" >&2; exit 1; }
+fi
 [ -f "$IMAGE" ] || { echo "fixture $IMAGE missing" >&2; exit 1; }
 auth=(-H "Authorization: Bearer $TOKEN")
 

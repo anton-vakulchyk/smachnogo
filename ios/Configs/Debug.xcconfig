@@ -1,6 +1,15 @@
-// Debug points at the local dev API. Secrets (the bearer token) live in
-// the gitignored Secrets.xcconfig — copy Secrets.example.xcconfig to start.
-#include? "Secrets.xcconfig"
+// Debug points at the local dev API. Later assignments override earlier
+// ones in xcconfig — defaults live here, real secrets come from the
+// gitignored Secrets.xcconfig included LAST (copy Secrets.example.xcconfig).
 
 // xcconfig eats "//" as a comment — $() splits the slashes safely.
 API_BASE_URL = http:/$()/localhost:8090
+
+// Defaults when Secrets.xcconfig doesn't define them.
+API_BEARER_TOKEN =
+COGNITO_REGION = us-east-1
+COGNITO_CLIENT_ID =
+COGNITO_DEV_USERNAME =
+COGNITO_DEV_PASSWORD =
+
+#include? "Secrets.xcconfig"

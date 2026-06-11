@@ -22,6 +22,14 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CognitoClientID</key>
+	<string>$(COGNITO_CLIENT_ID)</string>
+	<key>CognitoDevPassword</key>
+	<string>$(COGNITO_DEV_PASSWORD)</string>
+	<key>CognitoDevUsername</key>
+	<string>$(COGNITO_DEV_USERNAME)</string>
+	<key>CognitoRegion</key>
+	<string>$(COGNITO_REGION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

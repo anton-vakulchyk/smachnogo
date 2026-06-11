@@ -33,6 +33,13 @@ variable "llm_provider" {
   default = "gemini"
 }
 
+# Deployed API auth. Static stays available for emergencies; local dev keeps
+# static via dev.env regardless.
+variable "auth_mode" {
+  type    = string
+  default = "cognito"
+}
+
 # gemini-3.1-pro-preview once the Google billing tier allows it (one var flip).
 variable "llm_model_vision" {
   type    = string

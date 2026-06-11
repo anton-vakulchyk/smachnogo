@@ -1,4 +1,9 @@
-// Release points at prod (stood up pre-TestFlight, M6.5). No token here —
-// Release auth is Cognito (M2+); the static token is Debug-only.
+// Release points at prod (stood up pre-TestFlight, M6.5). No secrets here —
+// Release auth is Cognito per-install identities (M6); the static token and
+// dev-user credentials are Debug-only.
 API_BASE_URL = https:/$()/api.smachnogo.app
 API_BEARER_TOKEN =
+COGNITO_REGION = us-east-1
+COGNITO_CLIENT_ID =
+COGNITO_DEV_USERNAME =
+COGNITO_DEV_PASSWORD =

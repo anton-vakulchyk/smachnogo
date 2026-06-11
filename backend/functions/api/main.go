@@ -12,6 +12,7 @@ import (
 
 	"smachnogo/pkg/api"
 	"smachnogo/pkg/api/handlers"
+	"smachnogo/pkg/api/middleware"
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
 	"smachnogo/pkg/llm"
@@ -62,6 +63,19 @@ func main() {
 	if cfg.AuthMode == "static" && cfg.StaticBearerToken == "" {
 		logger.Fatal("AUTH_MODE=static requires STATIC_BEARER_TOKEN (env or SSM)")
 	}
+	var cognitoAuth *middleware.CognitoAuth
+	if cfg.AuthMode == "cognito" {
+		if cfg.CognitoPoolID == "" || cfg.CognitoClientID == "" {
+			logger.Fatal("AUTH_MODE=cognito requires COGNITO_POOL_ID and COGNITO_CLIENT_ID")
+		}
+		// Background context: the JWKS cache auto-refreshes for the process
+		// lifetime, not the bootstrap deadline.
+		ca, err := middleware.NewCognitoAuth(context.Background(), cfg.AWSRegion, cfg.CognitoPoolID, cfg.CognitoClientID)
+		if err != nil {
+			logger.Fatal("cognito auth init", zap.Error(err))
+		}
+		cognitoAuth = ca
+	}
 
 	st := store.New(awsCfg, cfg.TableName)
 	s3c := awsx.NewS3(awsCfg, cfg.Bucket)
@@ -81,10 +95,11 @@ func main() {
 	}
 
 	router := api.NewRouter(api.Deps{
-		Cfg:    cfg,
-		Logger: logger,
-		Scans:  scansH,
-		Meals:  &handlers.Meals{Cfg: cfg, Store: st},
+		Cfg:     cfg,
+		Logger:  logger,
+		Scans:   scansH,
+		Meals:   &handlers.Meals{Cfg: cfg, Store: st},
+		Cognito: cognitoAuth,
 	})
 
 	logger.Info("api starting",

@@ -31,8 +31,10 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = merge(local.common_env, {
-      ROLE      = "api"
-      AUTH_MODE = "static"
+      ROLE              = "api"
+      AUTH_MODE         = var.auth_mode
+      COGNITO_POOL_ID   = aws_cognito_user_pool.main.id
+      COGNITO_CLIENT_ID = aws_cognito_user_pool_client.ios.id
     })
   }
 }
