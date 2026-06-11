@@ -18,12 +18,11 @@ struct StaticTokenProvider: TokenProvider {
     }
 }
 
-/// One shared provider for the process: Cognito when build config carries
-/// pool credentials, otherwise the static dev token.
+/// One shared provider for the process: anonymous-first Cognito when the
+/// build carries an app client, otherwise the static dev token.
 let sharedTokenProvider: TokenProvider = {
     if let c = AppConfig.cognito {
-        return CognitoTokenProvider(region: c.region, clientID: c.clientID,
-                                    username: c.username, password: c.password)
+        return CognitoTokenProvider(region: c.region, clientID: c.clientID)
     }
     return StaticTokenProvider()
 }()

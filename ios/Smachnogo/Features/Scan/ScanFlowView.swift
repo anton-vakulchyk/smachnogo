@@ -32,7 +32,14 @@ struct ScanFlowView: View {
         .task(id: entry?.step) {
             if entry?.step == .awaitingSelection && job == nil && !fetchingJob {
                 fetchingJob = true
-                job = try? await ScanService().getScan(scanId: scanId)
+                do {
+                    job = try await ScanService().getScan(scanId: scanId)
+                } catch let APIError.http(status, _, _) where status == 404 {
+                    // Scan belongs to a previous identity (or TTL'd out) —
+                    // the entry is unrecoverable; clean it up.
+                    queue.discard(scanId)
+                    dismiss()
+                } catch {}
                 fetchingJob = false
             }
         }

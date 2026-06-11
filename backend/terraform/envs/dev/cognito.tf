@@ -23,12 +23,47 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   admin_create_user_config {
-    allow_admin_create_user_only = true # M6 flips this for self-signup
+    allow_admin_create_user_only = false # M6: per-install silent self-signup
+  }
+
+  # Auto-confirm trigger: anonymous device identities have nothing to verify.
+  lambda_config {
+    pre_sign_up = aws_lambda_function.presignup.arn
   }
 
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "aws_iam_role" "presignup" {
+  name               = "${local.prefix}-presignup-${var.env}"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "presignup_logs" {
+  role       = aws_iam_role.presignup.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "presignup" {
+  function_name = "${local.prefix}-presignup-${var.env}"
+  role          = aws_iam_role.presignup.arn
+  architectures = ["arm64"]
+  runtime       = "provided.al2"
+  handler       = "bootstrap"
+  filename      = "${path.module}/../../../bin/presignup.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../../bin/presignup.zip")
+  memory_size   = 128
+  timeout       = 5
+}
+
+resource "aws_lambda_permission" "cognito_presignup" {
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.presignup.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
 }
 
 resource "aws_cognito_user_pool_client" "ios" {

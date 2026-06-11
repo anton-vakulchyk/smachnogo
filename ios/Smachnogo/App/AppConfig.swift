@@ -19,22 +19,18 @@ enum AppConfig {
     struct CognitoConfig {
         let region: String
         let clientID: String
-        let username: String
-        let password: String
     }
 
-    /// Present when the build carries Cognito settings (M2: the hardcoded
-    /// dev user from Secrets.xcconfig; M6 replaces username/password with
-    /// per-install Keychain identities).
+    /// Present when the build carries a Cognito app client. Identity is
+    /// per-install (silent signup + Keychain) — no credentials in config
+    /// since M6; the dev-user xcconfig keys are unused and ignored.
     static var cognito: CognitoConfig? {
         func plist(_ key: String) -> String {
             Bundle.main.object(forInfoDictionaryKey: key) as? String ?? ""
         }
         let clientID = plist("CognitoClientID")
-        let username = plist("CognitoDevUsername")
-        let password = plist("CognitoDevPassword")
-        guard !clientID.isEmpty, !username.isEmpty, !password.isEmpty else { return nil }
+        guard !clientID.isEmpty else { return nil }
         let region = plist("CognitoRegion").isEmpty ? "us-east-1" : plist("CognitoRegion")
-        return CognitoConfig(region: region, clientID: clientID, username: username, password: password)
+        return CognitoConfig(region: region, clientID: clientID)
     }
 }

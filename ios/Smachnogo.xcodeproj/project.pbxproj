@@ -10,6 +10,7 @@
 		28A35332B69E63473C3BC0C4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE3C095585C5BB88AB716E3 /* Models.swift */; };
 		3838F74908D304157BF7F365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14832D0BB58E3B64005040B /* RootTabView.swift */; };
 		393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */; };
+		3D3DD37EB8E8C37AD6A46DC3 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F7274EDCD962219087B81B /* KeychainStore.swift */; };
 		469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */; };
 		4927DBFCB7DBB471510B2AF6 /* CalendarStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE56F27FD32E2D3393659A0 /* CalendarStrip.swift */; };
 		49438C5280F8DE6E64B774A7 /* ManualEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66C330A456373682FF3FFC80 /* ManualEntrySheet.swift */; };
@@ -56,6 +57,7 @@
 		C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanResultView.swift; sourceTree = "<group>"; };
 		C68A84ED87F693DE06B24759 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		E86B973FC51869E11CA624FB /* DayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayView.swift; sourceTree = "<group>"; };
+		F7F7274EDCD962219087B81B /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		F9D06D31498D2298A7F25526 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FFCDB482F4005D11ADFD79E4 /* MealService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -66,6 +68,7 @@
 			children = (
 				747AA4CB7B1F22E68EE19415 /* APIClient.swift */,
 				81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */,
+				F7F7274EDCD962219087B81B /* KeychainStore.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -279,6 +282,7 @@
 				F727493C36B6D453179969EB /* DateUtil.swift in Sources */,
 				7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */,
 				469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */,
+				3D3DD37EB8E8C37AD6A46DC3 /* KeychainStore.swift in Sources */,
 				49438C5280F8DE6E64B774A7 /* ManualEntrySheet.swift in Sources */,
 				393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */,
 				5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */,

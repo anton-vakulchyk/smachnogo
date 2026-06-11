@@ -24,4 +24,5 @@ build_one() {
 
 build_one api functions/api
 build_one scanworker functions/workers/scanworker
-echo "built: bin/api.zip bin/scanworker.zip (GIT_SHA=$GIT_SHA)"
+build_one presignup functions/presignup
+echo "built: bin/api.zip bin/scanworker.zip bin/presignup.zip (GIT_SHA=$GIT_SHA)"
