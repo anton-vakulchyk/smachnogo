@@ -271,6 +271,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					DEA9010017B77185396F4714 = {
+						DevelopmentTeam = CP598M5SUG;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -461,6 +462,7 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";
@@ -486,6 +488,7 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";

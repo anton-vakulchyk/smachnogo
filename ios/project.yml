@@ -45,6 +45,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
         ITSAppUsesNonExemptEncryption: NO
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: CP598M5SUG # Anton Vakulchyk — device builds + SIWA signing
     info:
       path: Smachnogo/Info.plist
       properties:
