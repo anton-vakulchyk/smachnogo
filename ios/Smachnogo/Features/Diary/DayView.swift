@@ -15,8 +15,10 @@ struct DayView: View {
     @State private var cameraDenied = false
     @State private var photoItem: PhotosPickerItem?
     @State private var scanImage: UIImage?
+    @State private var scanSuggestedDate: Date?
     @State private var editingMeal: Meal?
     @State private var showSettings = false
+    @State private var showManualEntry = false
 
     private let mealService = MealService()
     private var dayKey: String { DateUtil.dayString(selectedDate) }
@@ -36,6 +38,8 @@ struct DayView: View {
                         .accessibilityLabel("Settings")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showManualEntry = true } label: { Image(systemName: "square.and.pencil") }
+                        .accessibilityLabel("Describe a meal")
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Image(systemName: "photo.on.rectangle")
                     }
@@ -51,17 +55,29 @@ struct DayView: View {
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
+                    // EXIF creation date (read BEFORE the compressor strips
+                    // metadata) prefills the confirm sheet's date — the
+                    // "photographed at lunch, logging at night" flow.
+                    scanSuggestedDate = Self.exifCreationDate(data)
                     scanImage = image
                 }
                 photoItem = nil
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraPicker { image in scanImage = image }
-                .ignoresSafeArea()
+            CameraPicker { image in
+                scanSuggestedDate = nil // live camera = now
+                scanImage = image
+            }
+            .ignoresSafeArea()
         }
         .sheet(item: $scanImage) { image in
-            ScanFlowView(image: image) { _ in
+            ScanFlowView(image: image, suggestedDate: scanSuggestedDate) { _ in
+                Task { await load() }
+            }
+        }
+        .sheet(isPresented: $showManualEntry) {
+            ManualEntrySheet {
                 Task { await load() }
             }
         }
@@ -125,6 +141,17 @@ struct DayView: View {
             MealRow(meal: meal)
         }
         .buttonStyle(.plain)
+        .swipeActions(edge: .leading) {
+            Button {
+                Task {
+                    _ = try? await mealService.logAgainToday(meal)
+                    await load()
+                }
+            } label: {
+                Label("Log again", systemImage: "arrow.counterclockwise")
+            }
+            .tint(.green)
+        }
     }
 
     private func openCamera() {
@@ -238,4 +265,23 @@ struct MealRow: View {
 // Allows .sheet(item:) on a UIImage payload.
 extension UIImage: @retroactive Identifiable {
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
+}
+
+import ImageIO
+
+extension DayView {
+    /// EXIF DateTimeOriginal from raw photo data (library picks carry it;
+    /// must run before ImageCompressor strips metadata).
+    static func exifCreationDate(_ data: Data) -> Date? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any],
+              let raw = exif[kCGImagePropertyExifDateTimeOriginal] as? String else {
+            return nil
+        }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        f.timeZone = TimeZone.current
+        return f.date(from: raw)
+    }
 }

@@ -175,6 +175,8 @@ struct Meal: Codable, Identifiable, Equatable {
     var nutritionScore: Int
     var dietQualityScore: Int
     var portionFactor: Double
+    var refined: Bool
+    var refinementAnswer: String?
     var scanId: String?
     var dishIndex: Int?
 
@@ -182,11 +184,12 @@ struct Meal: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case mealId = "meal_id"
-        case date, state, label, source
+        case date, state, label, source, refined
         case consumedAt = "consumed_at"
         case nutritionScore = "nutrition_score"
         case dietQualityScore = "diet_quality_score"
         case portionFactor = "portion_factor"
+        case refinementAnswer = "refinement_answer"
         case scanId = "scan_id"
         case dishIndex = "dish_index"
     }
@@ -203,6 +206,8 @@ struct Meal: Codable, Identifiable, Equatable {
         nutritionScore = try c.decode(Int.self, forKey: .nutritionScore)
         dietQualityScore = try c.decode(Int.self, forKey: .dietQualityScore)
         portionFactor = try c.decode(Double.self, forKey: .portionFactor)
+        refined = try c.decodeIfPresent(Bool.self, forKey: .refined) ?? false
+        refinementAnswer = try c.decodeIfPresent(String.self, forKey: .refinementAnswer)
         scanId = try c.decodeIfPresent(String.self, forKey: .scanId)
         dishIndex = try c.decodeIfPresent(Int.self, forKey: .dishIndex)
     }
@@ -219,6 +224,8 @@ struct Meal: Codable, Identifiable, Equatable {
         try c.encode(nutritionScore, forKey: .nutritionScore)
         try c.encode(dietQualityScore, forKey: .dietQualityScore)
         try c.encode(portionFactor, forKey: .portionFactor)
+        try c.encode(refined, forKey: .refined)
+        try c.encodeIfPresent(refinementAnswer, forKey: .refinementAnswer)
         try c.encodeIfPresent(scanId, forKey: .scanId)
         try c.encodeIfPresent(dishIndex, forKey: .dishIndex)
     }
@@ -226,4 +233,81 @@ struct Meal: Codable, Identifiable, Equatable {
 
 struct MealsResponse: Codable {
     var meals: [Meal]
+}
+
+struct EstimateItem: Codable, Identifiable {
+    var name: String
+    var quantityDesc: String
+    var nutrients: Nutrients
+    var nutritionScore: Int
+    var dietQualityScore: Int
+    var confidence: Double
+
+    var id: String { name + quantityDesc }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case quantityDesc = "quantity_desc"
+        case nutritionScore = "nutrition_score"
+        case dietQualityScore = "diet_quality_score"
+        case confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        quantityDesc = try c.decode(String.self, forKey: .quantityDesc)
+        nutrients = try Nutrients(from: decoder)
+        nutritionScore = try c.decode(Int.self, forKey: .nutritionScore)
+        dietQualityScore = try c.decode(Int.self, forKey: .dietQualityScore)
+        confidence = try c.decode(Double.self, forKey: .confidence)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encode(quantityDesc, forKey: .quantityDesc)
+        try nutrients.encode(to: encoder)
+        try c.encode(nutritionScore, forKey: .nutritionScore)
+        try c.encode(dietQualityScore, forKey: .dietQualityScore)
+        try c.encode(confidence, forKey: .confidence)
+    }
+}
+
+struct EstimateTotals: Codable {
+    var nutrients: Nutrients
+    var nutritionScore: Int
+    var dietQualityScore: Int
+
+    enum CodingKeys: String, CodingKey {
+        case nutritionScore = "nutrition_score"
+        case dietQualityScore = "diet_quality_score"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nutrients = try Nutrients(from: decoder)
+        nutritionScore = try c.decode(Int.self, forKey: .nutritionScore)
+        dietQualityScore = try c.decode(Int.self, forKey: .dietQualityScore)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try nutrients.encode(to: encoder)
+        try c.encode(nutritionScore, forKey: .nutritionScore)
+        try c.encode(dietQualityScore, forKey: .dietQualityScore)
+    }
+}
+
+struct EstimateResponse: Codable {
+    var isFood: Bool
+    var label: String
+    var assumptions: String
+    var items: [EstimateItem]
+    var totals: EstimateTotals
+
+    enum CodingKeys: String, CodingKey {
+        case isFood = "is_food"
+        case label, assumptions, items, totals
+    }
 }

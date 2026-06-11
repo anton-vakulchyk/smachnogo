@@ -248,6 +248,39 @@ func (s *Store) ConfirmDish(ctx context.Context, userID string, scanID string, d
 	return nil
 }
 
+// WriteRefinement stores (or replaces — last answer wins) the revised dish
+// for one index. Condition: scan exists, the index is not yet confirmed,
+// and the immutable result is present (READY).
+func (s *Store) WriteRefinement(ctx context.Context, userID, scanID string, dishIndex int, dish models.Dish, now time.Time) error {
+	dishAV, err := attributevalue.Marshal(dish)
+	if err != nil {
+		return fmt.Errorf("marshal refined dish: %w", err)
+	}
+	idx := strconv.Itoa(dishIndex)
+	_, err = s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           &s.table,
+		Key:                 scanKey(userID, scanID),
+		UpdateExpression:    aws.String("SET refinements.#idx = :dish, updated_at = :now"),
+		ConditionExpression: aws.String("attribute_exists(PK) AND attribute_exists(#res) AND attribute_not_exists(confirmed_dishes.#idx)"),
+		ExpressionAttributeNames: map[string]string{
+			"#idx": idx,
+			"#res": "result",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":dish": dishAV,
+			":now":  mustMarshalTime(now),
+		},
+	})
+	if err != nil {
+		var ccf *types.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return ErrWrongState
+		}
+		return fmt.Errorf("write refinement: %w", err)
+	}
+	return nil
+}
+
 func mustMarshalTime(t time.Time) types.AttributeValue {
 	av, err := attributevalue.Marshal(t)
 	if err != nil {

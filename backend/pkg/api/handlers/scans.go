@@ -15,6 +15,7 @@ import (
 	"smachnogo/pkg/api/middleware"
 	"smachnogo/pkg/awsx"
 	"smachnogo/pkg/config"
+	"smachnogo/pkg/llm"
 	"smachnogo/pkg/logging"
 	"smachnogo/pkg/models"
 	"smachnogo/pkg/scanproc"
@@ -29,8 +30,11 @@ type Scans struct {
 	S3        *awsx.S3
 	Queue     *awsx.SQS
 	Processor *scanproc.Processor
-	SSM       *awsx.SSM // nil when SSM_PREFIX unset (local dev)
+	SSM       *awsx.SSM    // nil when SSM_PREFIX unset (local dev)
+	Analyzer  llm.Analyzer // dish refinement (text model)
 }
+
+func nowUTC() time.Time { return time.Now().UTC() }
 
 type createScanReq struct {
 	ScanID string `json:"scan_id"`

@@ -54,7 +54,7 @@ func (c *Client) AnalyzePhoto(ctx context.Context, jpeg []byte) (*models.PhotoAn
 	var out models.PhotoAnalysis
 	usage, err := c.call(ctx, callSpec{
 		model: c.visionModel, system: schema.VisionSystem, schema: schema.PhotoAnalysis(),
-		maxTokens: 4096, timeout: 75 * time.Second, parts: parts,
+		maxTokens: 8192, thinkingBudget: 1024, timeout: 75 * time.Second, parts: parts,
 	}, &out)
 	return &out, usage, err
 }
@@ -63,7 +63,7 @@ func (c *Client) EstimateText(ctx context.Context, text string) (*models.TextEst
 	var out models.TextEstimate
 	usage, err := c.call(ctx, callSpec{
 		model: c.textModel, system: schema.TextEstimateSystem, schema: schema.TextEstimate(),
-		maxTokens: 2048, timeout: 15 * time.Second, parts: []part{{Text: text}},
+		maxTokens: 4096, thinkingBudget: 0, timeout: 15 * time.Second, parts: []part{{Text: text}},
 	}, &out)
 	return &out, usage, err
 }
@@ -77,7 +77,7 @@ func (c *Client) RefineDish(ctx context.Context, dish models.Dish, answer string
 	var out models.Dish
 	usage, err := c.call(ctx, callSpec{
 		model: c.textModel, system: schema.RefineSystem, schema: schema.Dish(),
-		maxTokens: 1024, timeout: 15 * time.Second, parts: []part{{Text: user}},
+		maxTokens: 2048, thinkingBudget: 0, timeout: 15 * time.Second, parts: []part{{Text: user}},
 	}, &out)
 	return &out, usage, err
 }
@@ -99,10 +99,19 @@ type content struct {
 	Parts []part `json:"parts"`
 }
 
+type thinkingConfig struct {
+	ThinkingBudget int `json:"thinkingBudget"`
+}
+
 type generationConfig struct {
-	ResponseMimeType   string         `json:"responseMimeType"`
-	ResponseJSONSchema map[string]any `json:"responseJsonSchema,omitempty"`
-	MaxOutputTokens    int            `json:"maxOutputTokens,omitempty"`
+	ResponseMimeType   string          `json:"responseMimeType"`
+	ResponseJSONSchema map[string]any  `json:"responseJsonSchema,omitempty"`
+	MaxOutputTokens    int             `json:"maxOutputTokens,omitempty"`
+	// Gemini 3 thinks by default and thoughts bill INTO maxOutputTokens —
+	// unbounded thinking can exhaust the budget before any JSON is emitted
+	// (observed: finishReason MAX_TOKENS on a vision call). Extraction
+	// tasks need a small bounded budget, not open-ended reasoning.
+	ThinkingConfig *thinkingConfig `json:"thinkingConfig,omitempty"`
 }
 
 type generateRequest struct {
@@ -136,12 +145,13 @@ type generateResponse struct {
 }
 
 type callSpec struct {
-	model     string
-	system    string
-	schema    map[string]any
-	maxTokens int
-	timeout   time.Duration
-	parts     []part
+	model          string
+	system         string
+	schema         map[string]any
+	maxTokens      int
+	thinkingBudget int // bounded thinking; 0 disables
+	timeout        time.Duration
+	parts          []part
 }
 
 func (c *Client) call(ctx context.Context, spec callSpec, dst any) (llm.Usage, error) {
@@ -155,6 +165,7 @@ func (c *Client) call(ctx context.Context, spec callSpec, dst any) (llm.Usage, e
 			ResponseMimeType:   "application/json",
 			ResponseJSONSchema: spec.schema,
 			MaxOutputTokens:    spec.maxTokens,
+			ThinkingConfig:     &thinkingConfig{ThinkingBudget: spec.thinkingBudget},
 		},
 	}
 	payload, err := json.Marshal(reqBody)

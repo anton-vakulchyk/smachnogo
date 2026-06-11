@@ -72,6 +72,31 @@ struct ScanService: Sendable {
         let resp: MealsResponse = try await api.post("/v1/scans/\(scanId)/confirm", body: req)
         return resp.meals
     }
+
+    struct RefineResponse: Codable {
+        var dishIndex: Int
+        var dish: Dish
+        enum CodingKeys: String, CodingKey {
+            case dishIndex = "dish_index"
+            case dish
+        }
+    }
+
+    /// Re-estimate one low-confidence dish given the user's answer about
+    /// its contents. The server keeps the original immutable.
+    func refine(scanId: String, dishIndex: Int, answer: String) async throws -> Dish {
+        struct Req: Encodable {
+            var dishIndex: Int
+            var answer: String
+            enum CodingKeys: String, CodingKey {
+                case dishIndex = "dish_index"
+                case answer
+            }
+        }
+        let resp: RefineResponse = try await api.post("/v1/scans/\(scanId)/refine",
+                                                      body: Req(dishIndex: dishIndex, answer: answer))
+        return resp.dish
+    }
 }
 
 /// Local photo storage: the compressed upload image is kept until the meal

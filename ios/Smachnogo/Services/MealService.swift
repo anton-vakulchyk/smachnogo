@@ -103,4 +103,73 @@ struct MealService: Sendable {
     func deleteAccount() async throws {
         try await api.requestVoid("/v1/users/me", method: "DELETE", query: [])
     }
+
+    func estimate(text: String) async throws -> EstimateResponse {
+        try await api.post("/v1/meals/estimate", body: ["text": text])
+    }
+
+    func recent(limit: Int = 20) async throws -> [Meal] {
+        let resp: MealsResponse = try await api.get("/v1/meals/recent", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+        ])
+        return resp.meals
+    }
+
+    struct CreateMealRequest: Encodable {
+        var mealId: String
+        var date: String
+        var state: String
+        var consumedAt: String
+        var label: String
+        var source: String
+        var nutrients: Nutrients
+        var nutritionScore: Int
+        var dietQualityScore: Int
+        var components: [EstimateItem]
+
+        enum CodingKeys: String, CodingKey {
+            case mealId = "meal_id"
+            case date, state, label, source, components
+            case consumedAt = "consumed_at"
+            case nutritionScore = "nutrition_score"
+            case dietQualityScore = "diet_quality_score"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(mealId, forKey: .mealId)
+            try c.encode(date, forKey: .date)
+            try c.encode(state, forKey: .state)
+            try c.encode(consumedAt, forKey: .consumedAt)
+            try c.encode(label, forKey: .label)
+            try c.encode(source, forKey: .source)
+            try nutrients.encode(to: encoder)
+            try c.encode(nutritionScore, forKey: .nutritionScore)
+            try c.encode(dietQualityScore, forKey: .dietQualityScore)
+            try c.encode(components, forKey: .components)
+        }
+    }
+
+    @discardableResult
+    func create(_ req: CreateMealRequest) async throws -> Meal {
+        let resp: MealEnvelope = try await api.post("/v1/meals", body: req)
+        return resp.meal
+    }
+
+    /// One-gesture re-log: copy a past meal to today with a fresh id.
+    @discardableResult
+    func logAgainToday(_ meal: Meal) async throws -> Meal {
+        try await create(CreateMealRequest(
+            mealId: UUID().uuidString.lowercased(),
+            date: DateUtil.dayString(),
+            state: "logged",
+            consumedAt: ISO8601DateFormatter().string(from: Date()),
+            label: meal.label,
+            source: "readd",
+            nutrients: meal.nutrients,
+            nutritionScore: meal.nutritionScore,
+            dietQualityScore: meal.dietQualityScore,
+            components: []
+        ))
+    }
 }

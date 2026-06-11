@@ -50,9 +50,12 @@ func NewRouter(d Deps) http.Handler {
 		v1.Post("/scans/{scanID}/uploaded", d.Scans.Uploaded)
 		v1.Get("/scans/{scanID}", d.Scans.Get)
 		v1.Post("/scans/{scanID}/confirm", d.Scans.Confirm)
+		v1.Post("/scans/{scanID}/refine", d.Scans.Refine)
 
 		v1.Post("/meals", d.Meals.Create)
 		v1.Get("/meals", d.Meals.List)
+		v1.Get("/meals/recent", d.Meals.Recent)
+		v1.Post("/meals/estimate", d.Meals.Estimate)
 		v1.Patch("/meals/{mealID}", d.Meals.Patch)
 		v1.Delete("/meals/{mealID}", d.Meals.Delete)
 		v1.Get("/summary", d.Meals.Summary)

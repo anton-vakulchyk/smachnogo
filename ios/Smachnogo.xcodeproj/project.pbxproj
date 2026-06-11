@@ -12,6 +12,7 @@
 		393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */; };
 		469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */; };
 		4927DBFCB7DBB471510B2AF6 /* CalendarStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE56F27FD32E2D3393659A0 /* CalendarStrip.swift */; };
+		49438C5280F8DE6E64B774A7 /* ManualEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66C330A456373682FF3FFC80 /* ManualEntrySheet.swift */; };
 		5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFCDB482F4005D11ADFD79E4 /* MealService.swift */; };
 		689C88199D7AD542FD39B124 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BADD8BA79B6C850C2680829 /* SettingsView.swift */; };
 		762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC8A1C67222242B2EBF5953 /* ScanService.swift */; };
@@ -36,6 +37,7 @@
 		5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCompressor.swift; sourceTree = "<group>"; };
 		5B89C606EBEF0DA99335F769 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		60C1CED8E4229832877B840F /* MonthGridSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridSheet.swift; sourceTree = "<group>"; };
+		66C330A456373682FF3FFC80 /* ManualEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntrySheet.swift; sourceTree = "<group>"; };
 		747AA4CB7B1F22E68EE19415 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		764E5BDEF6E503F035A69BE9 /* DateUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateUtil.swift; sourceTree = "<group>"; };
 		81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CognitoTokenProvider.swift; sourceTree = "<group>"; };
@@ -147,6 +149,14 @@
 			path = Support;
 			sourceTree = "<group>";
 		};
+		C9AE6534803D05EDA56F4935 /* ManualEntry */ = {
+			isa = PBXGroup;
+			children = (
+				66C330A456373682FF3FFC80 /* ManualEntrySheet.swift */,
+			);
+			path = ManualEntry;
+			sourceTree = "<group>";
+		};
 		D3EF4E433F396EB1C87B1D94 /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
@@ -169,6 +179,7 @@
 			children = (
 				D3EF4E433F396EB1C87B1D94 /* Calendar */,
 				46532EA9C5E7AE634B325573 /* Diary */,
+				C9AE6534803D05EDA56F4935 /* ManualEntry */,
 				FF6C1AB39841D4C23257601A /* Scan */,
 				1640AFA85ECAC90D22B53BCC /* Settings */,
 			);
@@ -251,6 +262,7 @@
 				F727493C36B6D453179969EB /* DateUtil.swift in Sources */,
 				7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */,
 				469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */,
+				49438C5280F8DE6E64B774A7 /* ManualEntrySheet.swift in Sources */,
 				393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */,
 				5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */,
 				28A35332B69E63473C3BC0C4 /* Models.swift in Sources */,

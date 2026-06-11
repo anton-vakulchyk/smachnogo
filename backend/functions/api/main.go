@@ -80,12 +80,14 @@ func main() {
 	st := store.New(awsCfg, cfg.TableName)
 	s3c := awsx.NewS3(awsCfg, cfg.Bucket)
 
-	scansH := &handlers.Scans{Cfg: cfg, Store: st, S3: s3c, SSM: ssmClient}
+	// The API needs the analyzer in every mode since M4 (sync estimates +
+	// refinement); LOCAL_SYNC additionally runs the vision processor inline.
+	analyzer, err := llm.New(cfg.LLMProvider, cfg.LLMKey(), cfg.LLMModelVision, cfg.LLMModelText)
+	if err != nil {
+		logger.Fatal("llm init", zap.Error(err))
+	}
+	scansH := &handlers.Scans{Cfg: cfg, Store: st, S3: s3c, SSM: ssmClient, Analyzer: analyzer}
 	if cfg.LocalSync {
-		analyzer, err := llm.New(cfg.LLMProvider, cfg.LLMKey(), cfg.LLMModelVision, cfg.LLMModelText)
-		if err != nil {
-			logger.Fatal("llm init (LOCAL_SYNC needs the API key)", zap.Error(err))
-		}
 		scansH.Processor = &scanproc.Processor{
 			Store: st, S3: s3c, Analyzer: analyzer,
 			Provider: cfg.LLMProvider, Model: cfg.LLMModelVision,
@@ -102,7 +104,7 @@ func main() {
 		Cfg:     cfg,
 		Logger:  logger,
 		Scans:   scansH,
-		Meals:   &handlers.Meals{Cfg: cfg, Store: st},
+		Meals:   &handlers.Meals{Cfg: cfg, Store: st, Analyzer: analyzer},
 		Users:   usersH,
 		Cognito: cognitoAuth,
 	})

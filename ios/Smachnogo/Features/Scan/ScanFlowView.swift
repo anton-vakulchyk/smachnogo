@@ -61,6 +61,7 @@ final class ScanFlowModel {
 
 struct ScanFlowView: View {
     let image: UIImage
+    var suggestedDate: Date? = nil // EXIF prefill for library photos
     let onSaved: ([Meal]) -> Void
     @State private var model = ScanFlowModel()
     @Environment(\.dismiss) private var dismiss
@@ -97,7 +98,8 @@ struct ScanFlowView: View {
             .padding()
         case let .result(job, img):
             if let analysis = job.result {
-                ScanResultView(scanId: job.scanId, analysis: analysis, image: img) { meals in
+                ScanResultView(scanId: job.scanId, analysis: analysis, image: img,
+                               suggestedDate: suggestedDate) { meals in
                     onSaved(meals)
                     dismiss()
                 }

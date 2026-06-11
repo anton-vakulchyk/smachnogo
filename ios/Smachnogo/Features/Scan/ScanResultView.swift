@@ -10,22 +10,28 @@ struct ScanResultView: View {
     let image: UIImage
     let onSaved: ([Meal]) -> Void
 
+    @State private var dishes: [Dish] // refined dishes replace entries in place
     @State private var selected: Set<Int>
     @State private var portions: [Int: Double] = [:]
-    @State private var date = Date()
+    @State private var date: Date
     @State private var saving = false
     @State private var saveError: String?
+    @State private var refining: Set<Int> = []
+    @State private var freeTextAnswer: [Int: String] = [:]
+    @State private var lastTimeAnswers: [String: String] = [:] // lowercased label → past refinement answer
 
     private static let portionChoices: [(String, Double)] = [
         ("¼", 0.25), ("⅓", 1.0 / 3.0), ("½", 0.5), ("¾", 0.75), ("1", 1.0), ("1½", 1.5), ("2", 2.0),
     ]
 
-    init(scanId: String, analysis: PhotoAnalysis, image: UIImage, onSaved: @escaping ([Meal]) -> Void) {
+    init(scanId: String, analysis: PhotoAnalysis, image: UIImage, suggestedDate: Date? = nil, onSaved: @escaping ([Meal]) -> Void) {
         self.scanId = scanId
         self.analysis = analysis
         self.image = image
         self.onSaved = onSaved
+        _dishes = State(initialValue: analysis.dishes)
         _selected = State(initialValue: Set(analysis.dishes.indices))
+        _date = State(initialValue: suggestedDate ?? Date())
     }
 
     var body: some View {
@@ -39,11 +45,11 @@ struct ScanResultView: View {
             }
 
             Section {
-                ForEach(analysis.dishes.indices, id: \.self) { i in
+                ForEach(dishes.indices, id: \.self) { i in
                     dishRow(i)
                 }
             } header: {
-                Text(analysis.dishes.count > 1 ? "Which dishes are yours?" : "Your meal")
+                Text(dishes.count > 1 ? "Which dishes are yours?" : "Your meal")
             }
 
             Section {
@@ -59,6 +65,16 @@ struct ScanResultView: View {
 
             Section {
                 totalsRow
+            }
+        }
+        .task {
+            // "Same as last time": map past refined meals' labels to their
+            // recorded answers (meals are the durable copy — scans TTL out).
+            guard dishes.contains(where: { $0.needsClarification }) else { return }
+            if let recents = try? await MealService().recent(limit: 50) {
+                for m in recents where m.refined && !(m.refinementAnswer ?? "").isEmpty {
+                    lastTimeAnswers[m.label.lowercased()] = m.refinementAnswer
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -94,7 +110,7 @@ struct ScanResultView: View {
 
     @ViewBuilder
     private func dishRow(_ i: Int) -> some View {
-        let dish = analysis.dishes[i]
+        let dish = dishes[i]
         let factor = portions[i] ?? 1.0
         VStack(alignment: .leading, spacing: 8) {
             Button {
@@ -131,6 +147,10 @@ struct ScanResultView: View {
                     }
                 }
 
+                if dish.needsClarification && dish.confidence < 0.6 {
+                    clarificationRow(i, dish)
+                }
+
                 DisclosureGroup("Nutrients") {
                     nutrientsGrid(dish.nutrients.scaled(factor))
                 }
@@ -140,13 +160,73 @@ struct ScanResultView: View {
         .padding(.vertical, 2)
     }
 
+    /// The refine affordance — never blocks saving; one question, tappable
+    /// chips, optional free text. "Same as last time" reuses a past answer.
+    @ViewBuilder
+    private func clarificationRow(_ i: Int, _ dish: Dish) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if refining.contains(i) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Updating estimate…").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(dish.clarificationQuestion)
+                    .font(.footnote.weight(.medium))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        if let last = lastTimeAnswers[dish.label.lowercased()] {
+                            Button("Same as last time") { refine(i, answer: last) }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.mini)
+                        }
+                        ForEach(dish.clarificationOptions, id: \.self) { option in
+                            Button(option) { refine(i, answer: option) }
+                                .buttonStyle(.bordered)
+                                .controlSize(.mini)
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Or type what's in it…", text: Binding(
+                        get: { freeTextAnswer[i] ?? "" },
+                        set: { freeTextAnswer[i] = $0 }
+                    ))
+                    .font(.caption)
+                    .textFieldStyle(.roundedBorder)
+                    Button {
+                        if let a = freeTextAnswer[i], !a.isEmpty { refine(i, answer: a) }
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                    }
+                    .disabled((freeTextAnswer[i] ?? "").isEmpty)
+                }
+            }
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func refine(_ i: Int, answer: String) {
+        refining.insert(i)
+        Task {
+            do {
+                let revised = try await ScanService().refine(scanId: scanId, dishIndex: i, answer: answer)
+                dishes[i] = revised
+            } catch {
+                saveError = error.localizedDescription
+            }
+            refining.remove(i)
+        }
+    }
+
     private func scaledKcal(_ dish: Dish, _ factor: Double) -> Int {
         Int((Double(dish.nutrients.caloriesKcal) * factor).rounded())
     }
 
     private var selectedTotals: Nutrients {
         selected.reduce(Nutrients.zero) { acc, i in
-            acc + analysis.dishes[i].nutrients.scaled(portions[i] ?? 1.0)
+            acc + dishes[i].nutrients.scaled(portions[i] ?? 1.0)
         }
     }
 
