@@ -19,6 +19,9 @@ struct ScanResultView: View {
     @State private var refining: Set<Int> = []
     @State private var freeTextAnswer: [Int: String] = [:]
     @State private var lastTimeAnswers: [String: String] = [:] // lowercased label → past refinement answer
+    // App Store health-app guideline: the AI-estimates disclaimer must be shown at the
+    // first scan result (and lives permanently in Settings). Once seen, never again here.
+    @AppStorage("hasSeenEstimateDisclaimer") private var hasSeenEstimateDisclaimer = false
 
     private static let portionChoices: [(String, Double)] = [
         ("¼", 0.25), ("⅓", 1.0 / 3.0), ("½", 0.5), ("¾", 0.75), ("1", 1.0), ("1½", 1.5), ("2", 2.0),
@@ -65,8 +68,13 @@ struct ScanResultView: View {
 
             Section {
                 totalsRow
+            } footer: {
+                if !hasSeenEstimateDisclaimer {
+                    Text("Calories and nutrition are AI estimates, not medical or dietary advice. You can adjust anything after saving.")
+                }
             }
         }
+        .onDisappear { hasSeenEstimateDisclaimer = true }
         .task {
             // "Same as last time": map past refined meals' labels to their
             // recorded answers (meals are the durable copy — scans TTL out).

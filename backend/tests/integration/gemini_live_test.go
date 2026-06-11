@@ -52,7 +52,11 @@ func TestGeminiLiveVision(t *testing.T) {
 	if err != nil {
 		t.Skipf("fixture missing: %v", err)
 	}
-	c := gemini.New(key, "gemini-3-flash-preview", "gemini-3.1-flash-lite")
+	visionModel := os.Getenv("GEMINI_VISION_MODEL")
+	if visionModel == "" {
+		visionModel = "gemini-2.5-flash"
+	}
+	c := gemini.New(key, visionModel, "gemini-3.1-flash-lite")
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 

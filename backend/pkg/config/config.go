@@ -84,7 +84,7 @@ func Load() (*Config, error) {
 	// Model defaults are provider-aware; env overrides win.
 	switch c.LLMProvider {
 	case "gemini":
-		c.LLMModelVision = getenv("LLM_MODEL_VISION", "gemini-3-flash-preview")
+		c.LLMModelVision = getenv("LLM_MODEL_VISION", "gemini-2.5-flash")
 		c.LLMModelText = getenv("LLM_MODEL_TEXT", "gemini-3.1-flash-lite")
 	default:
 		c.LLMModelVision = getenv("LLM_MODEL_VISION", "claude-opus-4-8")

@@ -1,9 +1,11 @@
 // Release points at prod (stood up pre-TestFlight, M6.5). No secrets here —
 // Release auth is Cognito per-install identities (M6); the static token and
 // dev-user credentials are Debug-only.
-API_BASE_URL = https:/$()/api.smachnogo.app
+// Prod API. api.smachnogo.app becomes a CNAME to this once DNS is wired
+// (see docs/appstore-readiness.md) — then flip this back to the domain.
+API_BASE_URL = https:/$()/b37hzro1uk.execute-api.us-east-1.amazonaws.com
 API_BEARER_TOKEN =
 COGNITO_REGION = us-east-1
-COGNITO_CLIENT_ID =
+COGNITO_CLIENT_ID = 48fo7072sj31ul2mo25vop8j3h
 COGNITO_DEV_USERNAME =
 COGNITO_DEV_PASSWORD =
