@@ -83,6 +83,16 @@ Not collected: name, email, phone, precise location (GPS is stripped on-device),
 | iOS "Back up & restore" in Settings | native SignInWithAppleButton + nonce, recovered→diary reload, `apple_linked` shown from /users/me; simulator shows the system sign-in prompt (no Apple ID on sim — expected) |
 | SIWA entitlement | `com.apple.developer.applesignin` via project.yml → Smachnogo.entitlements |
 
+## ✅ Done in M9 (limits & goals — built & verified)
+
+Daily caps (calories/sugar/sodium/sat-fat/carbs/fat) editable in Settings,
+persisted via `PATCH /v1/users/me {limits}` (allowlist-validated). Coloring
+is pure client-side (`LimitsRule.swift` owns the thresholds): a logged day
+is red iff ANY cap is exceeded, green iff all respected; weeks/months green
+at ≥80% green logged days, red below 50%. Month-grid dots, stats bars, and
+the period status dot recolor automatically — simulator-verified both ways
+(sugar cap 5 → red day; 50 → green day).
+
 **M8 caveats for Anton:** the on-device flow needs your **paid Apple Developer team** (capability registers with the App ID) and a device/simulator **signed into an Apple ID** — test once: link on device A, recover on device B (old device demotes to a fresh empty account by design — its Keychain identity was deleted server-side). The old device's already-issued access token keeps verifying ≤1h against an empty partition (same accepted residual as account deletion).
 
 ## 🧑 Anton — required before the paywall launch (M7 → live)

@@ -7,10 +7,11 @@ struct MonthGridSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var visibleMonth: Date = Date()
-    @State private var loggedDays: Set<String> = []
+    @State private var dayBuckets: [String: SummaryBucket] = [:]
 
     private let service = MealService()
     private let cal = Calendar.current
+    private var limits: [String: Double] { StoreService.shared.me?.limits ?? [:] }
 
     var body: some View {
         NavigationStack {
@@ -81,13 +82,24 @@ struct MonthGridSheet: View {
                     .font(.callout.weight(isToday ? .bold : .regular))
                     .foregroundStyle(isSelected ? Color.white : (isToday ? Color.accentColor : .primary))
                 Circle()
-                    .fill(loggedDays.contains(key) ? Color.accentColor : Color.clear)
+                    .fill(dotColor(key))
                     .frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity, minHeight: 40)
             .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+    }
+
+    /// No log → no dot. Logged → accent, or green/red against the user's
+    /// limits (M9: pure client-side mapping over the same day buckets).
+    private func dotColor(_ key: String) -> Color {
+        guard let bucket = dayBuckets[key] else { return .clear }
+        switch LimitsRule.dayStatus(bucket, limits: limits) {
+        case .green: return .green
+        case .red: return .red
+        case .neutral: return .accentColor
+        }
     }
 
     // MARK: - Data
@@ -97,7 +109,7 @@ struct MonthGridSheet: View {
         let from = DateUtil.dayString(interval.start)
         let to = DateUtil.dayString(interval.end.addingTimeInterval(-1))
         if let result = try? await service.summary(granularity: "day", from: from, to: to) {
-            loggedDays = Set(result.buckets.map(\.key))
+            dayBuckets = Dictionary(uniqueKeysWithValues: result.buckets.map { ($0.key, $0) })
         }
     }
 

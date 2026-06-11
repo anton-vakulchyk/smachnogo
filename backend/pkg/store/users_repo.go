@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -168,6 +169,34 @@ func (s *Store) SetEntitlement(ctx context.Context, userID string, ent models.En
 			return ErrStaleEntitlement
 		}
 		return fmt.Errorf("set entitlement: %w", err)
+	}
+	return nil
+}
+
+// SetLimits replaces the user's daily-cap map (replace semantics — the
+// client always sends the full map; empty map clears all limits).
+func (s *Store) SetLimits(ctx context.Context, userID string, limits map[string]float64, now time.Time) error {
+	expr := "SET limits = :l, created_at = if_not_exists(created_at, :now)"
+	values := map[string]types.AttributeValue{
+		":now": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", now.Unix())},
+	}
+	if len(limits) == 0 {
+		expr = "REMOVE limits SET created_at = if_not_exists(created_at, :now)"
+	} else {
+		m := make(map[string]types.AttributeValue, len(limits))
+		for k, v := range limits {
+			m[k] = &types.AttributeValueMemberN{Value: strconv.FormatFloat(v, 'f', -1, 64)}
+		}
+		values[":l"] = &types.AttributeValueMemberM{Value: m}
+	}
+	_, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &s.table,
+		Key:                       s.profileKey(userID),
+		UpdateExpression:          aws.String(expr),
+		ExpressionAttributeValues: values,
+	})
+	if err != nil {
+		return fmt.Errorf("set limits: %w", err)
 	}
 	return nil
 }

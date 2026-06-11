@@ -74,6 +74,7 @@ func NewRouter(d Deps) http.Handler {
 		v1.Get("/summary", d.Meals.Summary)
 
 		v1.With(ent).Get("/users/me", d.Users.Me)
+		v1.Patch("/users/me", d.Users.UpdateMe)
 		v1.Delete("/users/me", d.Users.DeleteMe)
 		v1.Get("/export", d.Users.Export)
 		if d.Apple != nil {

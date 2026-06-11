@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var appleStatus: String?
     @State private var appleBusy = false
     @State private var rawNonce = ""
+    @State private var showLimits = false
 
     private let service = MealService()
 
@@ -94,6 +95,20 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    Button {
+                        showLimits = true
+                    } label: {
+                        HStack {
+                            Label("Daily limits", systemImage: "gauge.with.needle")
+                            Spacer()
+                            Text(limitsSummary).foregroundStyle(.secondary).font(.footnote)
+                        }
+                    }
+                } footer: {
+                    Text("Set caps on calories, sugar, sodium and more — calendar days turn green or red against them.")
+                }
+
                 Section("About the numbers") {
                     Text("Calories, macros and scores are AI estimates from your photos and descriptions — useful for tracking trends, not medical or dietary advice. Estimates can be off, especially for hidden ingredients. You can adjust any meal after saving.")
                         .font(.footnote)
@@ -111,6 +126,7 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView(reason: nil) }
+            .sheet(isPresented: $showLimits) { LimitsEditorSheet(onSaved: onDataChanged) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -131,6 +147,11 @@ struct SettingsView: View {
                 Text("Your data is gone. The app starts fresh on next launch.")
             }
         }
+    }
+
+    private var limitsSummary: String {
+        let n = (StoreService.shared.me?.limits ?? [:]).count
+        return n == 0 ? "None set" : "\(n) set"
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {

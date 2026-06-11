@@ -104,16 +104,19 @@ func Entitlement(profiles ProfileGetter, mode string) func(http.Handler) http.Ha
 	enforced := mode == "enforce"
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			info := EntitlementInfo{Enforced: enforced, Subscribed: !enforced, Profile: &models.Profile{}}
-			if enforced {
-				p, err := profiles.GetProfile(r.Context(), UserID(r.Context()))
-				if err != nil {
-					logging.From(r.Context()).Error("entitlement profile read", zap.Error(err))
-					writeJSONError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
-					return
-				}
-				info.Profile = p
-				info.Subscribed = p.Ent().Subscribed()
+			// The profile loads in EVERY mode: routes wrapped here serve
+			// profile data beyond billing (limits, apple_linked) — "off"
+			// only disables the billing gates, it must not blank the data.
+			p, err := profiles.GetProfile(r.Context(), UserID(r.Context()))
+			if err != nil {
+				logging.From(r.Context()).Error("entitlement profile read", zap.Error(err))
+				writeJSONError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+				return
+			}
+			info := EntitlementInfo{
+				Enforced:   enforced,
+				Subscribed: !enforced || p.Ent().Subscribed(),
+				Profile:    p,
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyEntitlement{}, info)))
 		})

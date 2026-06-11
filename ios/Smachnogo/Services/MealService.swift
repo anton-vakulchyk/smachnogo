@@ -104,6 +104,14 @@ struct MealService: Sendable {
         try await api.requestVoid("/v1/users/me", method: "DELETE", query: [])
     }
 
+    struct LimitsEnvelope: Codable { var limits: [String: Double] }
+
+    /// Replace-semantics: always sends the full map; {} clears everything.
+    func updateLimits(_ limits: [String: Double]) async throws {
+        let _: LimitsEnvelope = try await api.request(
+            "/v1/users/me", method: "PATCH", body: ["limits": limits])
+    }
+
     func estimate(text: String) async throws -> EstimateResponse {
         try await api.post("/v1/meals/estimate", body: ["text": text])
     }

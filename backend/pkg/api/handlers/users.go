@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -37,7 +39,8 @@ func (h *Users) Me(w http.ResponseWriter, r *http.Request) {
 		ScansRemaining int                `json:"scans_remaining"`
 		AllowanceEnds  *time.Time         `json:"allowance_ends_at"`
 		AppleLinked    bool               `json:"apple_linked"`
-	}{Entitlement: ent.Profile.Ent(), AppleLinked: ent.Profile.AppleSub != ""}
+		Limits         map[string]float64 `json:"limits"`
+	}{Entitlement: ent.Profile.Ent(), AppleLinked: ent.Profile.AppleSub != "", Limits: emptyLimitsIfNil(ent.Profile.Limits)}
 
 	if !ent.Enforced || ent.Subscribed {
 		used, err := h.Store.GetDailyScans(r.Context(), middleware.UserID(r.Context()), now.Format("2006-01-02"))
@@ -55,6 +58,51 @@ func (h *Users) Me(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func emptyLimitsIfNil(m map[string]float64) map[string]float64 {
+	if m == nil {
+		return map[string]float64{}
+	}
+	return m
+}
+
+// maxLimitValue bounds limit inputs to something physically meaningful
+// (sodium in mg is the largest sane unit; 1e6 covers it with headroom).
+const maxLimitValue = 1_000_000
+
+// UpdateMe: PATCH /v1/users/me {limits} — replace-semantics daily caps.
+// Keys must be summary field names; values positive. Enforcement is purely
+// client-side coloring (plan M9): the server is just durable storage.
+func (h *Users) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserID(r.Context())
+
+	var req struct {
+		Limits map[string]float64 `json:"limits"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Limits == nil {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "limits object required (send {} to clear)")
+		return
+	}
+	if len(req.Limits) > len(models.LimitableFields) {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "too many limits")
+		return
+	}
+	for k, v := range req.Limits {
+		if !models.LimitableFields[k] {
+			writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "unknown limit field: "+k)
+			return
+		}
+		if v <= 0 || v > maxLimitValue || math.IsNaN(v) || math.IsInf(v, 0) {
+			writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "limit out of range: "+k)
+			return
+		}
+	}
+	if err := h.Store.SetLimits(r.Context(), userID, req.Limits, time.Now().UTC()); err != nil {
+		writeInternal(w, r, err, "set limits")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"limits": req.Limits})
 }
 
 // DeleteMe: DELETE /v1/users/me — full cascade: every DDB item in the

@@ -318,12 +318,14 @@ struct UserMe: Codable {
     var scansRemaining: Int
     var allowanceEndsAt: String?
     var appleLinked: Bool
+    var limits: [String: Double]
 
     enum CodingKeys: String, CodingKey {
         case entitlement
         case scansRemaining = "scans_remaining"
         case allowanceEndsAt = "allowance_ends_at"
         case appleLinked = "apple_linked"
+        case limits
     }
 
     var subscribed: Bool {

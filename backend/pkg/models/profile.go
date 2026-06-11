@@ -44,7 +44,28 @@ type Profile struct {
 	EntitlementUpdatedAt  int64       `dynamodbav:"entitlement_updated_at,omitempty"` // epoch millis (Apple signedDate) — webhook ordering authority
 	OriginalTransactionID string      `dynamodbav:"original_transaction_id,omitempty"`
 	AppleSub              string      `dynamodbav:"apple_sub,omitempty"` // Sign-in-with-Apple linkage (M8)
-	CreatedAt             int64       `dynamodbav:"created_at,omitempty"` // epoch seconds
+	// Limits are user-set daily caps keyed by summary field name (M9).
+	// Enforcement is zero: coloring is pure client-side mapping over the
+	// summary buckets; the server only persists and validates keys.
+	Limits    map[string]float64 `dynamodbav:"limits,omitempty"`
+	CreatedAt int64              `dynamodbav:"created_at,omitempty"` // epoch seconds
+}
+
+// LimitableFields are the summary fields a daily cap may target — exactly
+// the nutrient field names the summary buckets serve, so the client's
+// status mapping is mechanical.
+var LimitableFields = map[string]bool{
+	"calories_kcal":   true,
+	"protein_g":       true,
+	"fat_g":           true,
+	"carbs_g":         true,
+	"fiber_g":         true,
+	"sugar_g":         true,
+	"sodium_mg":       true,
+	"saturated_fat_g": true,
+	"iron_mg":         true,
+	"calcium_mg":      true,
+	"omega3_g":        true,
 }
 
 // Ent returns the effective entitlement (absent attribute = free).

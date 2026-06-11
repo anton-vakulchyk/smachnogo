@@ -18,6 +18,15 @@ struct StatsView: View {
 
     private let service = MealService()
     private let cal = Calendar.current
+    private var limits: [String: Double] { StoreService.shared.me?.limits ?? [:] }
+
+    /// Per-day limit status for the loaded buckets (empty when no limits).
+    private var dayStatuses: [String: LimitsRule.Status] {
+        guard !limits.isEmpty, let result else { return [:] }
+        return Dictionary(uniqueKeysWithValues: result.buckets.map {
+            ($0.key, LimitsRule.dayStatus($0, limits: limits))
+        })
+    }
 
     var body: some View {
         NavigationStack {
@@ -66,13 +75,26 @@ struct StatsView: View {
         HStack {
             Button { shift(-1) } label: { Image(systemName: "chevron.left") }
             Spacer()
-            Text(periodTitle).font(.headline)
+            HStack(spacing: 6) {
+                Text(periodTitle).font(.headline)
+                if granularity != .day, periodLimitStatus != .neutral {
+                    Circle()
+                        .fill(periodLimitStatus == .green ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                }
+            }
             Spacer()
             Button { shift(1) } label: { Image(systemName: "chevron.right") }
                 .disabled(periodRange.to >= DateUtil.dayString())
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
+    }
+
+    /// Week/month verdict against limits (≥80% of logged days green → green,
+    /// <50% → red — LimitsRule owns the thresholds).
+    private var periodLimitStatus: LimitsRule.Status {
+        LimitsRule.periodStatus(Array(dayStatuses.values))
     }
 
     private func shift(_ delta: Int) {
@@ -159,10 +181,32 @@ struct StatsView: View {
                     x: .value("Day", String(bucket.key.suffix(5))),
                     y: .value("kcal", bucket.nutrients.caloriesKcal)
                 )
-                .foregroundStyle(Color.accentColor.gradient)
+                .foregroundStyle(barColor(bucket).gradient)
             }
             .frame(height: 180)
+            if !limits.isEmpty {
+                limitsCaption
+            }
         }
+    }
+
+    /// Bars take the day's limit verdict when limits exist; plain accent
+    /// otherwise — the chart IS the calendar coloring at week/month zoom.
+    private func barColor(_ bucket: SummaryBucket) -> Color {
+        switch dayStatuses[bucket.key] {
+        case .green: return .green
+        case .red: return .red
+        default: return .accentColor
+        }
+    }
+
+    private var limitsCaption: some View {
+        let statuses = Array(dayStatuses.values).filter { $0 != .neutral }
+        let green = statuses.filter { $0 == .green }.count
+        return Text("\(green) of \(statuses.count) logged day\(statuses.count == 1 ? "" : "s") within limits")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func scoresCard(_ r: SummaryResult) -> some View {

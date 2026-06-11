@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		141793B7F425D322848B2A82 /* LimitsEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACD40C59CE7E17D26A1BD97 /* LimitsEditorSheet.swift */; };
 		28A35332B69E63473C3BC0C4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE3C095585C5BB88AB716E3 /* Models.swift */; };
 		3838F74908D304157BF7F365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14832D0BB58E3B64005040B /* RootTabView.swift */; };
 		393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */; };
@@ -20,6 +21,7 @@
 		5FB7EDD4497DDDBD6503F60E /* NutrientDV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0090C092D2A80A43FDEB556B /* NutrientDV.swift */; };
 		689C88199D7AD542FD39B124 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BADD8BA79B6C850C2680829 /* SettingsView.swift */; };
 		69AE5D97D05BF8B1C4662F3E /* AppleLinkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888B409138221D6EB68B8DDA /* AppleLinkService.swift */; };
+		757FC04EFF8819695213B4FF /* LimitsRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */; };
 		75911023BC9683AA5B75F348 /* PendingScanQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A47335E5CC0ED933E42A4874 /* PendingScanQueue.swift */; };
 		762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC8A1C67222242B2EBF5953 /* ScanService.swift */; };
 		7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86B973FC51869E11CA624FB /* DayView.swift */; };
@@ -44,6 +46,7 @@
 		371405627404C5912F29754A /* SmachnogoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmachnogoApp.swift; sourceTree = "<group>"; };
 		485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCompressor.swift; sourceTree = "<group>"; };
+		5ACD40C59CE7E17D26A1BD97 /* LimitsEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsEditorSheet.swift; sourceTree = "<group>"; };
 		5B89C606EBEF0DA99335F769 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		5D739513D8440418C24606C1 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		60C1CED8E4229832877B840F /* MonthGridSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridSheet.swift; sourceTree = "<group>"; };
@@ -55,6 +58,7 @@
 		888B409138221D6EB68B8DDA /* AppleLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinkService.swift; sourceTree = "<group>"; };
 		8BC8A1C67222242B2EBF5953 /* ScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanService.swift; sourceTree = "<group>"; };
 		9BADD8BA79B6C850C2680829 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsRule.swift; sourceTree = "<group>"; };
 		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		A47335E5CC0ED933E42A4874 /* PendingScanQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingScanQueue.swift; sourceTree = "<group>"; };
 		BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEditSheet.swift; sourceTree = "<group>"; };
@@ -108,6 +112,7 @@
 		1640AFA85ECAC90D22B53BCC /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				5ACD40C59CE7E17D26A1BD97 /* LimitsEditorSheet.swift */,
 				9BADD8BA79B6C850C2680829 /* SettingsView.swift */,
 			);
 			path = Settings;
@@ -181,6 +186,7 @@
 			children = (
 				764E5BDEF6E503F035A69BE9 /* DateUtil.swift */,
 				5414A8F99EBD576EB23F48AF /* ImageCompressor.swift */,
+				9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */,
 				0090C092D2A80A43FDEB556B /* NutrientDV.swift */,
 			);
 			path = Support;
@@ -303,6 +309,8 @@
 				7D778B5EEE7E6E4BAF39841C /* DayView.swift in Sources */,
 				469AE8341875EFA0D1DFB607 /* ImageCompressor.swift in Sources */,
 				3D3DD37EB8E8C37AD6A46DC3 /* KeychainStore.swift in Sources */,
+				141793B7F425D322848B2A82 /* LimitsEditorSheet.swift in Sources */,
+				757FC04EFF8819695213B4FF /* LimitsRule.swift in Sources */,
 				49438C5280F8DE6E64B774A7 /* ManualEntrySheet.swift in Sources */,
 				393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */,
 				5C9ED35ACC6AFB4448BA68E6 /* MealService.swift in Sources */,
