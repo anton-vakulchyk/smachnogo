@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -28,16 +29,42 @@ type handler struct {
 	logger    *zap.Logger
 	processor *scanproc.Processor
 	ssm       *awsx.SSM
+	dlqMode   bool // DLQ_MODE=1: dead-letter consumer (mark FAILED, no LLM)
 }
 
 func (h *handler) handle(ctx context.Context, event events.SQSEvent) (events.SQSEventResponse, error) {
 	var failures []events.SQSBatchItemFailure
 	for _, record := range event.Records {
-		if err := h.handleRecord(ctx, record); err != nil {
+		var err error
+		if h.dlqMode {
+			err = h.handleDLQRecord(ctx, record)
+		} else {
+			err = h.handleRecord(ctx, record)
+		}
+		if err != nil {
 			failures = append(failures, events.SQSBatchItemFailure{ItemIdentifier: record.MessageId})
 		}
 	}
 	return events.SQSEventResponse{BatchItemFailures: failures}, nil
+}
+
+// handleDLQRecord runs when DLQ_MODE=1: a message that exhausted its
+// retries lands here — mark the scan FAILED(internal) (+ quota refund via
+// the shared failure path) so clients aren't polling a zombie forever.
+func (h *handler) handleDLQRecord(ctx context.Context, record events.SQSMessage) error {
+	log := h.logger.With(zap.String("sqs_message_id", record.MessageId), zap.Bool("dlq", true))
+	ctx = logging.Into(ctx, log)
+
+	var msg awsx.ScanMessage
+	if err := json.Unmarshal([]byte(record.Body), &msg); err != nil || msg.UserID == "" || msg.ScanID == "" {
+		log.Error("malformed DLQ message — acking", zap.String("body", record.Body))
+		return nil
+	}
+	if err := h.processor.FailScan(ctx, msg.UserID, msg.ScanID); err != nil {
+		log.Error("DLQ fail-scan errored — acking anyway (alarm already fired)", zap.Error(err))
+	}
+	log.Warn("scan dead-lettered → FAILED(internal)", zap.String("scan_id", msg.ScanID))
+	return nil
 }
 
 func (h *handler) handleRecord(ctx context.Context, record events.SQSMessage) error {
@@ -109,9 +136,10 @@ func main() {
 	}
 
 	h := &handler{
-		cfg:    cfg,
-		logger: logger,
-		ssm:    ssmClient,
+		cfg:     cfg,
+		logger:  logger,
+		ssm:     ssmClient,
+		dlqMode: os.Getenv("DLQ_MODE") == "1",
 		processor: &scanproc.Processor{
 			Store:    store.New(awsCfg, cfg.TableName),
 			S3:       awsx.NewS3(awsCfg, cfg.Bucket),

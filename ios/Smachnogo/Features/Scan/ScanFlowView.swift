@@ -1,70 +1,22 @@
 import SwiftUI
-import PhotosUI
 
-/// The scan state machine: compress → create → upload → confirm-upload →
-/// poll → result (dish selection) → save. The model owns the pipeline so
-/// progress survives sheet gymnastics.
-@MainActor
-@Observable
-final class ScanFlowModel {
-    enum Phase {
-        case idle
-        case working(String) // progress label
-        case result(ScanJob, UIImage)
-        case notFood
-        case failed(String)
-    }
-
-    var phase: Phase = .idle
-    private let service = ScanService()
-
-    func run(image: UIImage) {
-        phase = .working("Preparing photo…")
-        Task {
-            do {
-                guard let jpeg = ImageCompressor.compressForUpload(image) else {
-                    phase = .failed("Couldn't read that photo.")
-                    return
-                }
-                phase = .working("Uploading…")
-                let created = try await service.createScan()
-                try await service.uploadPhoto(jpeg, to: created.uploadURL)
-                try await service.confirmUploaded(scanId: created.scanId)
-                LocalPhotoStore.saveThumbnail(image, scanId: created.scanId)
-
-                phase = .working("Analyzing your meal…")
-                let job = try await service.awaitResult(scanId: created.scanId)
-                if job.status == .failed {
-                    phase = .failed(friendlyFailure(job.failureReason))
-                    return
-                }
-                if job.result?.isFood != true {
-                    phase = .notFood
-                    return
-                }
-                phase = .result(job, image)
-            } catch {
-                phase = .failed(error.localizedDescription)
-            }
-        }
-    }
-
-    private func friendlyFailure(_ reason: String?) -> String {
-        switch reason {
-        case "image_unreadable": return "That photo couldn't be processed — try another shot."
-        case "no_image": return "The photo didn't finish uploading — try again."
-        case "analysis_implausible": return "The analysis didn't look right — try a clearer shot."
-        default: return "Something went wrong — your photo wasn't counted. Try again."
-        }
-    }
-}
-
+/// Live view over a PendingScanQueue entry. The QUEUE owns the pipeline
+/// (photo persisted before any network step) — dismissing this sheet
+/// abandons nothing; the scan continues and surfaces in the diary's
+/// pending section.
 struct ScanFlowView: View {
+    let scanId: String
     let image: UIImage
-    var suggestedDate: Date? = nil // EXIF prefill for library photos
     let onSaved: ([Meal]) -> Void
-    @State private var model = ScanFlowModel()
+
+    @State private var queue = PendingScanQueue.shared
+    @State private var job: ScanJob?
+    @State private var fetchingJob = false
     @Environment(\.dismiss) private var dismiss
+
+    private var entry: PendingScanQueue.Entry? {
+        queue.entries.first { $0.scanId == scanId }
+    }
 
     var body: some View {
         NavigationStack {
@@ -73,36 +25,43 @@ struct ScanFlowView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        Button(dismissLabel) { dismiss() }
                     }
                 }
         }
-        .task { model.run(image: image) }
-        .interactiveDismissDisabled()
+        .task(id: entry?.step) {
+            if entry?.step == .awaitingSelection && job == nil && !fetchingJob {
+                fetchingJob = true
+                job = try? await ScanService().getScan(scanId: scanId)
+                fetchingJob = false
+            }
+        }
+    }
+
+    private var dismissLabel: String {
+        switch entry?.step {
+        case .awaitingSelection, .notFood, .failed, nil: return "Close"
+        default: return "Continue in background"
+        }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch model.phase {
-        case .idle:
-            Color.clear
-        case let .working(label):
-            VStack(spacing: 16) {
-                Image(uiImage: image)
-                    .resizable().scaledToFit()
-                    .frame(maxHeight: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                ProgressView()
-                Text(label).foregroundStyle(.secondary)
-            }
-            .padding()
-        case let .result(job, img):
-            if let analysis = job.result {
-                ScanResultView(scanId: job.scanId, analysis: analysis, image: img,
-                               suggestedDate: suggestedDate) { meals in
+        switch entry?.step {
+        case .needsCreate, .needsUpload, .needsConfirm:
+            progress("Uploading…")
+        case .awaitingResult:
+            progress("Analyzing your meal…")
+        case .awaitingSelection:
+            if let job, let analysis = job.result {
+                ScanResultView(scanId: scanId, analysis: analysis, image: image,
+                               suggestedDate: entry?.suggestedDate) { meals in
+                    queue.completeSaved(scanId)
                     onSaved(meals)
                     dismiss()
                 }
+            } else {
+                progress("Loading result…")
             }
         case .notFood:
             ContentUnavailableView {
@@ -110,16 +69,43 @@ struct ScanFlowView: View {
             } description: {
                 Text("This photo doesn't seem to show food — it wasn't counted against anything. Try another shot.")
             } actions: {
-                Button("Close") { dismiss() }
+                Button("Close") {
+                    queue.discard(scanId)
+                    dismiss()
+                }
             }
-        case let .failed(message):
+        case .failed:
             ContentUnavailableView {
                 Label("Scan failed", systemImage: "exclamationmark.triangle")
             } description: {
-                Text(message)
+                Text(entry?.failureMessage ?? "Something went wrong — your photo is kept; you can retry.")
             } actions: {
-                Button("Close") { dismiss() }
+                Button("Retry") { queue.retry(scanId); }
+                Button("Discard", role: .destructive) {
+                    queue.discard(scanId)
+                    dismiss()
+                }
             }
+        case nil:
+            // Entry gone (saved or discarded elsewhere).
+            Color.clear.onAppear { dismiss() }
         }
+    }
+
+    private func progress(_ label: String) -> some View {
+        VStack(spacing: 16) {
+            Image(uiImage: image)
+                .resizable().scaledToFit()
+                .frame(maxHeight: 280)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            ProgressView()
+            Text(label).foregroundStyle(.secondary)
+            Text("You can close this — the scan keeps going and appears in your diary when ready.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .padding()
     }
 }

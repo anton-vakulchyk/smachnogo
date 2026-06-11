@@ -65,6 +65,36 @@ resource "aws_lambda_event_source_mapping" "worker_sqs" {
   function_response_types = ["ReportBatchItemFailures"]
 }
 
+# DLQ consumer: same binary, DLQ_MODE=1 — marks dead-lettered scans
+# FAILED(internal) + refunds quota so clients aren't polling zombies.
+resource "aws_lambda_function" "dlq_consumer" {
+  function_name = "${local.prefix}-dlqconsumer-${var.env}"
+  role          = aws_iam_role.worker.arn # same scopes: table write + queue consume
+  architectures = ["arm64"]
+  runtime       = "provided.al2"
+  handler       = "bootstrap"
+  filename      = "${path.module}/../../../bin/scanworker.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../../bin/scanworker.zip")
+  memory_size   = 256
+  timeout       = 30
+
+  environment {
+    variables = merge(local.common_env, { ROLE = "worker", DLQ_MODE = "1" })
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "dlq_consumer_sqs" {
+  event_source_arn        = aws_sqs_queue.scans_dlq.arn
+  function_name           = aws_lambda_function.dlq_consumer.arn
+  batch_size              = 1
+  function_response_types = ["ReportBatchItemFailures"]
+}
+
+resource "aws_cloudwatch_log_group" "dlq_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.dlq_consumer.function_name}"
+  retention_in_days = 30
+}
+
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/${aws_lambda_function.api.function_name}"
   retention_in_days = 30

@@ -14,11 +14,17 @@ struct DayView: View {
     @State private var showCamera = false
     @State private var cameraDenied = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var scanImage: UIImage?
-    @State private var scanSuggestedDate: Date?
+    @State private var activeScan: ActiveScan?
     @State private var editingMeal: Meal?
     @State private var showSettings = false
     @State private var showManualEntry = false
+    @State private var queue = PendingScanQueue.shared
+
+    struct ActiveScan: Identifiable {
+        let scanId: String
+        let image: UIImage
+        var id: String { scanId }
+    }
 
     private let mealService = MealService()
     private var dayKey: String { DateUtil.dayString(selectedDate) }
@@ -50,6 +56,7 @@ struct DayView: View {
             }
         }
         .task(id: dayKey) { await load() }
+        .task { queue.resumeAll() }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
@@ -58,21 +65,19 @@ struct DayView: View {
                     // EXIF creation date (read BEFORE the compressor strips
                     // metadata) prefills the confirm sheet's date — the
                     // "photographed at lunch, logging at night" flow.
-                    scanSuggestedDate = Self.exifCreationDate(data)
-                    scanImage = image
+                    startScan(image, suggestedDate: Self.exifCreationDate(data))
                 }
                 photoItem = nil
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
-                scanSuggestedDate = nil // live camera = now
-                scanImage = image
+                startScan(image, suggestedDate: nil) // live camera = now
             }
             .ignoresSafeArea()
         }
-        .sheet(item: $scanImage) { image in
-            ScanFlowView(image: image, suggestedDate: scanSuggestedDate) { _ in
+        .sheet(item: $activeScan) { scan in
+            ScanFlowView(scanId: scan.scanId, image: scan.image) { _ in
                 Task { await load() }
             }
         }
@@ -109,10 +114,18 @@ struct DayView: View {
     private var content: some View {
         let logged = meals.filter { $0.state == "logged" }
         let planned = meals.filter { $0.state == "planned" }
-        if meals.isEmpty && !loading {
+        let isToday = Calendar.current.isDateInToday(selectedDate)
+        if meals.isEmpty && !loading && !(isToday && !queue.entries.isEmpty) {
             emptyState
         } else {
             List {
+                if isToday && !queue.entries.isEmpty {
+                    Section("In progress") {
+                        ForEach(queue.entries) { entry in
+                            PendingScanRow(entry: entry) { activeScan = makeActive(entry) }
+                        }
+                    }
+                }
                 if !logged.isEmpty {
                     Section { totalsHeader(logged) }
                 }
@@ -164,6 +177,20 @@ struct DayView: View {
         default:
             showCamera = true
         }
+    }
+
+    /// Photo into the crash-safe queue first, THEN the live sheet over it.
+    private func startScan(_ image: UIImage, suggestedDate: Date?) {
+        guard let scanId = queue.enqueue(image: image, suggestedDate: suggestedDate) else { return }
+        activeScan = ActiveScan(scanId: scanId, image: image)
+    }
+
+    private func makeActive(_ entry: PendingScanQueue.Entry) -> ActiveScan? {
+        guard let image = queue.loadImage(entry.scanId) else {
+            queue.discard(entry.scanId)
+            return nil
+        }
+        return ActiveScan(scanId: entry.scanId, image: image)
     }
 
     private func load() async {
@@ -265,6 +292,65 @@ struct MealRow: View {
 // Allows .sheet(item:) on a UIImage payload.
 extension UIImage: @retroactive Identifiable {
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
+}
+
+/// One pending-scan row: thumbnail + live step state. Tap opens the scan
+/// sheet (selection, retry, or progress).
+struct PendingScanRow: View {
+    let entry: PendingScanQueue.Entry
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                if let thumb = LocalPhotoStore.thumbnail(scanId: entry.scanId) {
+                    Image(uiImage: thumb)
+                        .resizable().scaledToFill()
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.body)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                trailing
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var title: String {
+        switch entry.step {
+        case .awaitingSelection: return "Ready — pick your dishes"
+        case .notFood: return "No food found"
+        case .failed: return "Scan failed"
+        default: return "Analyzing…"
+        }
+    }
+
+    private var subtitle: String {
+        switch entry.step {
+        case .awaitingSelection: return "Tap to review and save"
+        case .notFood: return "Tap to dismiss"
+        case .failed: return entry.failureMessage ?? "Tap to retry or discard"
+        default: return "Keeps going even if you close the app"
+        }
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch entry.step {
+        case .awaitingSelection:
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        case .notFood:
+            Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
+        default:
+            ProgressView().controlSize(.small)
+        }
+    }
 }
 
 import ImageIO

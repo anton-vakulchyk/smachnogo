@@ -105,7 +105,7 @@ data "aws_iam_policy_document" "worker" {
       "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
       "sqs:ChangeMessageVisibility",
     ]
-    resources = [aws_sqs_queue.scans.arn]
+    resources = [aws_sqs_queue.scans.arn, aws_sqs_queue.scans_dlq.arn]
   }
   statement {
     sid       = "Params"

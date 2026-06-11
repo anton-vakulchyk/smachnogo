@@ -106,6 +106,24 @@ func (p *Processor) Process(ctx context.Context, userID, scanID string) error {
 	return nil
 }
 
+// FailScan marks a scan FAILED(internal) with quota refund — the DLQ
+// consumer's path for messages that exhausted their retries. Idempotent:
+// already-terminal scans are left alone.
+func (p *Processor) FailScan(ctx context.Context, userID, scanID string) error {
+	log := logging.From(ctx).With(zap.String("user_id", userID), zap.String("scan_id", scanID))
+	scan, err := p.Store.GetScan(ctx, userID, scanID)
+	if errors.Is(err, store.ErrScanNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if scan.Status == models.ScanStatusReady || scan.Status == models.ScanStatusFailed {
+		return nil
+	}
+	return p.fail(ctx, log, userID, scanID, scan, models.FailInternal)
+}
+
 var errImplausible = errors.New("scanproc: implausible analysis")
 
 // analyzeWithPlausibilityRetry runs the vision call, clamps, and gates on

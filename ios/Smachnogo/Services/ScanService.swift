@@ -8,16 +8,16 @@ struct ScanService: Sendable {
 
     struct CreateResult {
         let scanId: String
-        let uploadURL: String
+        let uploadURL: String? // nil once the scan is already past upload (idempotent retry)
     }
 
-    func createScan() async throws -> CreateResult {
-        let scanId = UUID().uuidString.lowercased()
+    func createScan(scanId: String = UUID().uuidString.lowercased()) async throws -> CreateResult {
         let resp: ScanCreateResponse = try await api.post("/v1/scans", body: ["scan_id": scanId])
-        guard let upload = resp.upload else {
-            throw APIError.http(status: 409, code: "NO_UPLOAD_URL", message: "scan already past upload")
-        }
-        return CreateResult(scanId: resp.scanId, uploadURL: upload.url)
+        return CreateResult(scanId: resp.scanId, uploadURL: resp.upload?.url)
+    }
+
+    func getScan(scanId: String) async throws -> ScanJob {
+        try await api.get("/v1/scans/\(scanId)")
     }
 
     func uploadPhoto(_ jpeg: Data, to presignedURL: String) async throws {

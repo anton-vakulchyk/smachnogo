@@ -27,5 +27,5 @@ resource "aws_cloudwatch_metric_alarm" "dlq_depth" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  # M5 wires an SNS action; alarm exists from day 1 for visibility.
+  alarm_actions       = [aws_sns_topic.alerts.arn]
 }
