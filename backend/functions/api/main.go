@@ -54,7 +54,9 @@ func main() {
 				logger.Warn("ssm llm key unavailable", zap.String("param", secretName), zap.Error(err))
 			}
 		}
-		if cfg.StaticBearerToken == "" {
+		// The static token only matters in static auth mode — resolving it
+		// in cognito mode just warns on every cold start (prod noise).
+		if cfg.AuthMode == "static" && cfg.StaticBearerToken == "" {
 			if tok, err := ssmClient.GetSecret(ctx, "static_bearer_token"); err == nil {
 				cfg.StaticBearerToken = tok
 			} else {
