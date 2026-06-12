@@ -23,7 +23,7 @@ resource "aws_lambda_function" "api" {
   function_name = "${local.prefix}-api-${var.env}"
   role          = aws_iam_role.api.arn
   architectures = ["arm64"]
-  runtime       = "provided.al2"
+  runtime       = "provided.al2023"
   handler       = "bootstrap"
   filename      = "${path.module}/../../../bin/api.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/api.zip")
@@ -46,7 +46,7 @@ resource "aws_lambda_function" "worker" {
   function_name = "${local.prefix}-scanworker-${var.env}"
   role          = aws_iam_role.worker.arn
   architectures = ["arm64"]
-  runtime       = "provided.al2"
+  runtime       = "provided.al2023"
   handler       = "bootstrap"
   filename      = "${path.module}/../../../bin/scanworker.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/scanworker.zip")
@@ -74,7 +74,7 @@ resource "aws_lambda_function" "dlq_consumer" {
   function_name = "${local.prefix}-dlqconsumer-${var.env}"
   role          = aws_iam_role.worker.arn # same scopes: table write + queue consume
   architectures = ["arm64"]
-  runtime       = "provided.al2"
+  runtime       = "provided.al2023"
   handler       = "bootstrap"
   filename      = "${path.module}/../../../bin/scanworker.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/scanworker.zip")

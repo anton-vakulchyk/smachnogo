@@ -50,7 +50,7 @@ resource "aws_lambda_function" "presignup" {
   function_name = "${local.prefix}-presignup-${var.env}"
   role          = aws_iam_role.presignup.arn
   architectures = ["arm64"]
-  runtime       = "provided.al2"
+  runtime       = "provided.al2023"
   handler       = "bootstrap"
   filename      = "${path.module}/../../../bin/presignup.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/presignup.zip")
