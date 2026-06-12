@@ -47,7 +47,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: CP598M5SUG # Anton Vakulchyk — device builds + SIWA signing
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 2
+        CURRENT_PROJECT_VERSION: 3
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: smachnogo
     info:
