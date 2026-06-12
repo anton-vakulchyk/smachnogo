@@ -1,17 +1,7 @@
-# Lambda log groups, Terraform-managed: the auto-created defaults never
-# expire (cost creep) and dodge IaC. Existing groups are imported.
-locals {
-  lambda_log_functions = [
-    aws_lambda_function.api.function_name,
-    aws_lambda_function.worker.function_name,
-    aws_lambda_function.dlq_consumer.function_name,
-    aws_lambda_function.presignup.function_name,
-  ]
-}
-
-resource "aws_cloudwatch_log_group" "lambda" {
-  count             = 4
-  name              = "/aws/lambda/${local.lambda_log_functions[count.index]}"
+# Presignup's log group was never Terraform-managed (the other Lambda
+# groups live in lambda.tf). Retention policy: 30d dev / 90d prod.
+resource "aws_cloudwatch_log_group" "presignup" {
+  name              = "/aws/lambda/${aws_lambda_function.presignup.function_name}"
   retention_in_days = 30
 }
 

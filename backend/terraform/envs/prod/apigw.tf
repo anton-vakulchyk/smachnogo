@@ -45,7 +45,7 @@ resource "aws_apigatewayv2_stage" "default" {
 
 resource "aws_cloudwatch_log_group" "apigw" {
   name              = "/apigw/${local.prefix}-${var.env}"
-  retention_in_days = 30
+  retention_in_days = 90
 }
 
 resource "aws_lambda_permission" "apigw" {

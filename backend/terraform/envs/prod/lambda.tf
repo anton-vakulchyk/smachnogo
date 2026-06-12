@@ -95,15 +95,15 @@ resource "aws_lambda_event_source_mapping" "dlq_consumer_sqs" {
 
 resource "aws_cloudwatch_log_group" "dlq_consumer" {
   name              = "/aws/lambda/${aws_lambda_function.dlq_consumer.function_name}"
-  retention_in_days = 30
+  retention_in_days = 90
 }
 
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/${aws_lambda_function.api.function_name}"
-  retention_in_days = 30
+  retention_in_days = 90
 }
 
 resource "aws_cloudwatch_log_group" "worker" {
   name              = "/aws/lambda/${aws_lambda_function.worker.function_name}"
-  retention_in_days = 30
+  retention_in_days = 90
 }
