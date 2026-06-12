@@ -21,6 +21,7 @@
 		5FB7EDD4497DDDBD6503F60E /* NutrientDV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0090C092D2A80A43FDEB556B /* NutrientDV.swift */; };
 		689C88199D7AD542FD39B124 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BADD8BA79B6C850C2680829 /* SettingsView.swift */; };
 		69AE5D97D05BF8B1C4662F3E /* AppleLinkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888B409138221D6EB68B8DDA /* AppleLinkService.swift */; };
+		6F981C4C480F8B70F3118CD1 /* AppleSignInButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17C78C9F542E1C624249410 /* AppleSignInButton.swift */; };
 		757FC04EFF8819695213B4FF /* LimitsRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */; };
 		75911023BC9683AA5B75F348 /* PendingScanQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A47335E5CC0ED933E42A4874 /* PendingScanQueue.swift */; };
 		762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC8A1C67222242B2EBF5953 /* ScanService.swift */; };
@@ -70,6 +71,7 @@
 		C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanResultView.swift; sourceTree = "<group>"; };
 		C68A84ED87F693DE06B24759 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		E86B973FC51869E11CA624FB /* DayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayView.swift; sourceTree = "<group>"; };
+		F17C78C9F542E1C624249410 /* AppleSignInButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInButton.swift; sourceTree = "<group>"; };
 		F7F7274EDCD962219087B81B /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		F9D06D31498D2298A7F25526 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FFCDB482F4005D11ADFD79E4 /* MealService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealService.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 		1640AFA85ECAC90D22B53BCC /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				F17C78C9F542E1C624249410 /* AppleSignInButton.swift */,
 				5ACD40C59CE7E17D26A1BD97 /* LimitsEditorSheet.swift */,
 				9BADD8BA79B6C850C2680829 /* SettingsView.swift */,
 			);
@@ -318,6 +321,7 @@
 				DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */,
 				B034A2CD4B4FD2C5DD24AE9C /* AppConfig.swift in Sources */,
 				69AE5D97D05BF8B1C4662F3E /* AppleLinkService.swift in Sources */,
+				6F981C4C480F8B70F3118CD1 /* AppleSignInButton.swift in Sources */,
 				4927DBFCB7DBB471510B2AF6 /* CalendarStrip.swift in Sources */,
 				8C3E7712699A3F07E0363C1F /* CameraPicker.swift in Sources */,
 				C147A86EE34EA87A96EC9965 /* CognitoTokenProvider.swift in Sources */,

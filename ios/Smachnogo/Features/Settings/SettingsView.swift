@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var appleBusy = false
     @State private var rawNonce = ""
     @State private var showLimits = false
+    @State private var signInRunner = AppleSignInRunner()
 
     private let service = MealService()
 
@@ -56,14 +57,18 @@ struct SettingsView: View {
                     if appleBusy {
                         ProgressView()
                     } else {
-                        SignInWithAppleButton(.continue) { request in
+                        AppleSignInButton {
                             rawNonce = UUID().uuidString + UUID().uuidString
-                            request.nonce = AppleLinkService.sha256Hex(rawNonce)
-                        } onCompletion: { result in
-                            handleApple(result)
+                            signInRunner.run(nonceHash: AppleLinkService.sha256Hex(rawNonce)) { result in
+                                handleApple(result)
+                            }
                         }
-                        .signInWithAppleButtonStyle(.whiteOutline)
-                        .frame(height: 44)
+                        .frame(height: 48)
+                        // Inset past the section card's corner clip (iOS 26
+                        // Forms clip rows to a large-radius card — anything
+                        // touching the edges turns into a capsule).
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 2)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                     }
@@ -154,7 +159,7 @@ struct SettingsView: View {
         return n == 0 ? "None set" : "\(n) set"
     }
 
-    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+    fileprivate func handleApple(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case .failure(let err):
             // Includes cancellation and the simulator/no-team cases —
