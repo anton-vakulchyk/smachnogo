@@ -17,9 +17,10 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 52))
-                        .foregroundStyle(.tint)
+                    Image("Logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 84, height: 84)
                         .padding(.top, 24)
 
                     VStack(spacing: 6) {
