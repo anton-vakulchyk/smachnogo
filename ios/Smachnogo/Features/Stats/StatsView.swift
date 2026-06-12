@@ -64,6 +64,7 @@ struct StatsView: View {
                 }
                 .padding()
             }
+            .contentMargins(.bottom, 88, for: .scrollContent)
             .navigationTitle("Stats")
         }
         .task(id: "\(granularity.rawValue)-\(DateUtil.dayString(anchor))") { await load() }

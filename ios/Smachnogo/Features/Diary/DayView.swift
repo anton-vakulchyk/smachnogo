@@ -6,6 +6,9 @@ import AVFoundation
 /// planned meals, tap to edit, scan via camera/library. The empty state IS
 /// the onboarding.
 struct DayView: View {
+    /// Bumped by the floating Scan button (RootTabView) — opens the camera.
+    @Binding var scanRequests: Int
+
     @State private var selectedDate = Date()
     @State private var meals: [Meal] = []
     @State private var loading = false
@@ -13,6 +16,7 @@ struct DayView: View {
 
     @State private var showCamera = false
     @State private var cameraDenied = false
+    @State private var showLibrary = false
     @State private var photoItem: PhotosPickerItem?
     @State private var activeScan: ActiveScan?
     @State private var editingMeal: Meal?
@@ -49,12 +53,9 @@ struct DayView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showManualEntry = true } label: { Image(systemName: "square.and.pencil") }
                         .accessibilityLabel("Describe a meal")
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Image(systemName: "photo.on.rectangle")
-                    }
-                    .accessibilityLabel("Scan from photo library")
-                    Button { openCamera() } label: { Image(systemName: "camera") }
-                        .accessibilityLabel("Scan with camera")
+                    Button { showLibrary = true } label: { Image(systemName: "photo.on.rectangle") }
+                        .accessibilityLabel("Scan from photo library")
+                    // Camera lives on the floating Scan button (RootTabView).
                 }
             }
         }
@@ -66,6 +67,8 @@ struct DayView: View {
             // webhook) — un-park photos that were waiting on the paywall.
             if store.isSubscribed { queue.retryPaywalled() }
         }
+        .onChange(of: scanRequests) { _, _ in openCamera() }
+        .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
         .sheet(isPresented: $showPaywall) {
             PaywallView(reason: store.me.flatMap { $0.scansRemaining <= 0 ? "scans_exhausted" : nil })
         }
@@ -185,6 +188,7 @@ struct DayView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .contentMargins(.bottom, 88, for: .scrollContent)
             .refreshable { await load() }
         }
     }
@@ -209,7 +213,8 @@ struct DayView: View {
 
     private func openCamera() {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            return // simulator: no camera; library button covers it
+            showLibrary = true // simulator/no camera: photo library instead
+            return
         }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .denied, .restricted:
