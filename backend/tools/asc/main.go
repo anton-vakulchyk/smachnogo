@@ -58,8 +58,13 @@ func main() {
 		err = c.probe()
 	case "bootstrap":
 		err = c.bootstrap()
+	case "token":
+		var tok string
+		if tok, err = c.jwt(); err == nil {
+			fmt.Println(tok)
+		}
 	default:
-		err = fmt.Errorf("unknown command %q (probe|bootstrap)", cmd)
+		err = fmt.Errorf("unknown command %q (probe|bootstrap|token)", cmd)
 	}
 	if err != nil {
 		fatal(err)
