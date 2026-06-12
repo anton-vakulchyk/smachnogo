@@ -31,6 +31,7 @@
 		C147A86EE34EA87A96EC9965 /* CognitoTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */; };
 		C14D4F0A582906B24B0689FD /* ScanResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13A9D28DCD2554693D2C0FB /* ScanResultView.swift */; };
 		C2BFC3EC0FD6ADF37A8A83D2 /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1DB363C51F11ED5113A562 /* ScanFlowView.swift */; };
+		D8B975F5AE428A2228DE56B3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 99200E384D42839F40F45B68 /* Assets.xcassets */; };
 		DBDA336D61D6F47F40DC168B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747AA4CB7B1F22E68EE19415 /* APIClient.swift */; };
 		DE210B8320452917736CEA8E /* MonthGridSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C1CED8E4229832877B840F /* MonthGridSheet.swift */; };
 		F727493C36B6D453179969EB /* DateUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 764E5BDEF6E503F035A69BE9 /* DateUtil.swift */; };
@@ -57,6 +58,7 @@
 		871DCF45BBB435B902621FD7 /* Smachnogo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Smachnogo.entitlements; sourceTree = "<group>"; };
 		888B409138221D6EB68B8DDA /* AppleLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinkService.swift; sourceTree = "<group>"; };
 		8BC8A1C67222242B2EBF5953 /* ScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanService.swift; sourceTree = "<group>"; };
+		99200E384D42839F40F45B68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9BADD8BA79B6C850C2680829 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsRule.swift; sourceTree = "<group>"; };
 		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 		0A6FDC1C7ADD0DACFADF5273 /* Smachnogo */ = {
 			isa = PBXGroup;
 			children = (
+				99200E384D42839F40F45B68 /* Assets.xcassets */,
 				F9D06D31498D2298A7F25526 /* Info.plist */,
 				871DCF45BBB435B902621FD7 /* Smachnogo.entitlements */,
 				0D622A8D67F7BBF07A175B85 /* App */,
@@ -249,6 +252,7 @@
 			buildConfigurationList = 229AB8DBD6DADBF6C452B1DF /* Build configuration list for PBXNativeTarget "Smachnogo" */;
 			buildPhases = (
 				4CA545F30070BF387FDEF9B0 /* Sources */,
+				74B0657851E7D46F1A9BD0CF /* Resources */,
 			);
 			buildRules = (
 			);
@@ -294,6 +298,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		74B0657851E7D46F1A9BD0CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D8B975F5AE428A2228DE56B3 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4CA545F30070BF387FDEF9B0 /* Sources */ = {
@@ -462,9 +477,11 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = smachnogo;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pick an existing photo of your meal to log it — for example one you took earlier today.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -474,6 +491,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.smachnogo.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
@@ -488,9 +506,11 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = smachnogo;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Smachnogo photographs your meal to estimate its calories and nutrition.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pick an existing photo of your meal to log it — for example one you took earlier today.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -500,6 +520,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.smachnogo.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
