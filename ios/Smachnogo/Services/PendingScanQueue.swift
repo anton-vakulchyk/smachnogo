@@ -137,6 +137,9 @@ final class PendingScanQueue {
                 // Create is idempotent on scanId and re-issues a fresh
                 // presigned URL — resume-safe even after URL expiry.
                 let created = try await service.createScan(scanId: scanId)
+                // The allowance was consumed just now — keep the
+                // scans-remaining chip honest without waiting for relaunch.
+                Task { await StoreService.shared.refreshServerState() }
                 update(&entry, .needsUpload)
                 if let url = created.uploadURL {
                     let jpeg = try Data(contentsOf: Self.dir(scanId).appendingPathComponent("photo.jpg"))
