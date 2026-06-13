@@ -290,6 +290,14 @@ func (c *client) bootstrap() error {
 	if err != nil {
 		return fmt.Errorf("annual: %w", err)
 	}
+	// Availability MUST precede price: a price point for a territory the
+	// subscription isn't available in is rejected (409). USA-only matches
+	// the app's availability — one territory, one price, metadata complete.
+	for _, sub := range []string{monthly, annual} {
+		if err := c.ensureAvailability(sub); err != nil {
+			return fmt.Errorf("availability: %w", err)
+		}
+	}
 	if err := c.ensurePrice(monthly, monthlyPrice); err != nil {
 		return fmt.Errorf("monthly price: %w", err)
 	}
@@ -304,6 +312,9 @@ func (c *client) bootstrap() error {
 	}
 	fmt.Println()
 	fmt.Println("✅ bootstrap complete (re-run safe). Family Sharing left OFF by design.")
+	fmt.Println("⚠️  Subscriptions still need a REVIEW SCREENSHOT (scripts upload it) and,")
+	fmt.Println("    critically, an ACTIVE Paid Applications Agreement (App Store Connect →")
+	fmt.Println("    Business) — without it StoreKit returns zero products, even in sandbox.")
 	return nil
 }
 
@@ -433,8 +444,29 @@ func (c *client) ensureSubscription(groupID, productID, name, period string) (st
 	return created.Data.ID, nil
 }
 
-// ensurePrice sets the USA price point; Apple equalizes every other
-// territory from it (same behavior as picking a price in the web UI).
+// ensureAvailability makes the subscription available in the USA only (POST
+// replaces any prior availability). Matches the app's USA-only reach; a
+// single available territory means a single price completes the metadata.
+func (c *client) ensureAvailability(subID string) error {
+	err := c.do("POST", "/v1/subscriptionAvailabilities", map[string]any{"data": map[string]any{
+		"type":       "subscriptionAvailabilities",
+		"attributes": map[string]any{"availableInNewTerritories": false},
+		"relationships": map[string]any{
+			"subscription":         map[string]any{"data": refData{Type: "subscriptions", ID: subID}},
+			"availableTerritories": map[string]any{"data": []refData{{Type: "territories", ID: "USA"}}},
+		},
+	}}, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Println("availability set (USA) for", subID)
+	return nil
+}
+
+// ensurePrice sets the USA price. Availability must already exist (see
+// ensureAvailability) or the price point is rejected 409. NOTE: a 409 here
+// is a REAL failure — an earlier version swallowed it via isConflict and
+// printed a false success while no price was ever stored.
 func (c *client) ensurePrice(subID, price string) error {
 	var existing listResponse
 	if err := c.do("GET", "/v1/subscriptions/"+subID+"/prices?limit=1", nil, &existing); err == nil && len(existing.Data) > 0 {
@@ -445,17 +477,17 @@ func (c *client) ensurePrice(subID, price string) error {
 	if err != nil {
 		return err
 	}
-	err = c.do("POST", "/v1/subscriptionPrices", map[string]any{"data": resource{
+	if err := c.do("POST", "/v1/subscriptionPrices", map[string]any{"data": resource{
 		Type: "subscriptionPrices",
 		Relationships: map[string]relationshipOne{
 			"subscription":           rel("subscriptions", subID),
+			"territory":              rel("territories", "USA"),
 			"subscriptionPricePoint": rel("subscriptionPricePoints", pointID),
 		},
-	}}, nil)
-	if err != nil && !isConflict(err) {
-		return err
+	}}, nil); err != nil {
+		return fmt.Errorf("set price $%s: %w", price, err)
 	}
-	fmt.Printf("price set: $%s (USA base, territories equalized)\n", price)
+	fmt.Printf("price set: $%s (USA)\n", price)
 	return nil
 }
 
