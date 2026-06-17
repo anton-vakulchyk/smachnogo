@@ -64,8 +64,12 @@ struct StatsView: View {
                 }
                 .padding()
             }
-            .contentMargins(.bottom, 88, for: .scrollContent)
             .navigationTitle("Stats")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    SettingsButton { Task { await load() } }
+                }
+            }
         }
         .task(id: "\(granularity.rawValue)-\(DateUtil.dayString(anchor))") { await load() }
     }
