@@ -68,15 +68,8 @@ struct DayView: View {
             // webhook) — un-park photos that were waiting on the paywall.
             if store.isSubscribed { queue.retryPaywalled() }
         }
-        .onChange(of: addAction) { _, action in
-            guard let action else { return }
-            switch action {
-            case .camera: openCamera()
-            case .library: showLibrary = true
-            case .describe: showManualEntry = true
-            }
-            addAction = nil
-        }
+        .onChange(of: addAction) { _, _ in consumeAddAction() }
+        .onAppear { consumeAddAction() }
         .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
         .sheet(isPresented: $showPaywall) {
             PaywallView(reason: store.me.flatMap { $0.scansRemaining <= 0 ? "scans_exhausted" : nil })
@@ -218,6 +211,21 @@ struct DayView: View {
             }
             .tint(.green)
         }
+    }
+
+    /// Perform a pending add-action from the bottom-bar accessory. Driven by
+    /// BOTH onChange (DayView already on-screen) and onAppear (a Stats→Diary
+    /// switch can mount DayView with addAction already set, and a native
+    /// TabView delivers no onChange for a value present at mount). Clearing to
+    /// nil makes whichever fires second a no-op.
+    private func consumeAddAction() {
+        guard let action = addAction else { return }
+        switch action {
+        case .camera: openCamera()
+        case .library: showLibrary = true
+        case .describe: showManualEntry = true
+        }
+        addAction = nil
     }
 
     private func openCamera() {
