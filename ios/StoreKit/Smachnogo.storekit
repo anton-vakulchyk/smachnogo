@@ -31,7 +31,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited photo scanning",
+              "description" : "Photo calorie & nutrition scanning",
               "displayName" : "Premium Monthly",
               "locale" : "en_US"
             }
@@ -61,7 +61,7 @@
           },
           "localizations" : [
             {
-              "description" : "Unlimited photo scanning, 7 days free",
+              "description" : "Photo calorie & nutrition scanning — 7 days free",
               "displayName" : "Premium Annual",
               "locale" : "en_US"
             }

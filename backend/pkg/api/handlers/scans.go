@@ -214,6 +214,19 @@ func (h *Scans) Uploaded(w http.ResponseWriter, r *http.Request) {
 			h.processDetached(logging.From(r.Context()), userID, scanID)
 		} else {
 			if err := h.Queue.SendScan(r.Context(), userID, scanID, middleware.RequestID(r.Context())); err != nil {
+				// Enqueue failed AFTER we won the QUEUED transition: the scan is
+				// now QUEUED in DynamoDB with NO message on the queue. Left as-is
+				// it orphans — a retry of /uploaded sees status QUEUED, so
+				// TransitionToQueued returns transitioned=false and skips this
+				// block forever. Best-effort revert to PENDING_UPLOAD so the
+				// client's retry re-enters the transition+enqueue path cleanly
+				// (and re-wins the single-winner dedup). A failed revert is the
+				// rare residual orphan — log loudly.
+				if _, rerr := h.Store.RevertToPendingUpload(r.Context(), userID, scanID, time.Now().UTC()); rerr != nil {
+					logging.From(r.Context()).Error("enqueue revert failed — scan may be orphaned QUEUED",
+						zap.Error(rerr), zap.NamedError("enqueue_err", err),
+						zap.String("scan_id", scanID), zap.String("user_id", userID))
+				}
 				writeInternal(w, r, err, "enqueue scan")
 				return
 			}
@@ -270,6 +283,7 @@ func (h *Scans) Get(w http.ResponseWriter, r *http.Request) {
 type confirmDishReq struct {
 	Index         int      `json:"index"`
 	PortionFactor *float64 `json:"portion_factor"` // nil → 1.0
+	VariantIndex  *int     `json:"variant_index"`  // nil → 0 (default), only for dishes with variants
 }
 
 type confirmReq struct {
@@ -355,6 +369,25 @@ func (h *Scans) Confirm(w http.ResponseWriter, r *http.Request) {
 			refined = true
 			refinementAnswer = rd.Description // the revised description carries the answer's substance
 		}
+
+		// Variant selection (regular/diet fork). A refined dish has no variants
+		// (the fork collapsed), so this is a no-op there. variant_index defaults
+		// to 0 = the most-caloric default the model listed first.
+		var variantIdx *int
+		if len(dish.Variants) > 0 {
+			sel := 0
+			if dr.VariantIndex != nil {
+				sel = *dr.VariantIndex
+				if sel < 0 || sel >= len(dish.Variants) {
+					writeErr(w, http.StatusBadRequest, "BAD_REQUEST", fmt.Sprintf("variant_index %d out of range", sel))
+					return
+				}
+			}
+			dish.Nutrients = dish.Variants[sel].Nutrients
+			dish.Scores = dish.Variants[sel].Scores
+			variantIdx = &sel
+		}
+
 		scaled := dish.Scale(factor)
 
 		idx := dr.Index
@@ -372,6 +405,8 @@ func (h *Scans) Confirm(w http.ResponseWriter, r *http.Request) {
 			RefinementAnswer: refinementAnswer,
 			ScanID:           scanID,
 			DishIndex:        &idx,
+			Variants:         dish.Variants, // unscaled base blocks; switchable post-TTL
+			VariantIndex:     variantIdx,
 			PhotoS3Key:       awsx.ScanKey(userID, scanID),
 			SchemaVersion:    models.MealSchemaVersion,
 			CreatedAt:        now,

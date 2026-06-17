@@ -58,6 +58,27 @@ struct Nutrients: Codable, Equatable {
     }
 }
 
+// Defensive decode: by contract the backend never omits a numeric, but a
+// single missing/null field shouldn't wedge an entire scan. Treat any absent
+// nutrient as 0 to cap the blast radius. (init(from:) lives in an extension so
+// the memberwise initializer used by `zero`/`+`/`scaled` is preserved.)
+extension Nutrients {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        caloriesKcal = try c.decodeIfPresent(Int.self, forKey: .caloriesKcal) ?? 0
+        proteinG = try c.decodeIfPresent(Double.self, forKey: .proteinG) ?? 0
+        fatG = try c.decodeIfPresent(Double.self, forKey: .fatG) ?? 0
+        carbsG = try c.decodeIfPresent(Double.self, forKey: .carbsG) ?? 0
+        fiberG = try c.decodeIfPresent(Double.self, forKey: .fiberG) ?? 0
+        sugarG = try c.decodeIfPresent(Double.self, forKey: .sugarG) ?? 0
+        sodiumMg = try c.decodeIfPresent(Double.self, forKey: .sodiumMg) ?? 0
+        saturatedFatG = try c.decodeIfPresent(Double.self, forKey: .saturatedFatG) ?? 0
+        ironMg = try c.decodeIfPresent(Double.self, forKey: .ironMg) ?? 0
+        calciumMg = try c.decodeIfPresent(Double.self, forKey: .calciumMg) ?? 0
+        omega3G = try c.decodeIfPresent(Double.self, forKey: .omega3G) ?? 0
+    }
+}
+
 struct Dish: Codable, Equatable {
     var label: String
     var description: String
@@ -70,9 +91,10 @@ struct Dish: Codable, Equatable {
     var needsClarification: Bool
     var clarificationQuestion: String
     var clarificationOptions: [String]
+    var variants: [DishVariant]
 
     enum CodingKeys: String, CodingKey {
-        case label, description
+        case label, description, variants
         case portionDesc = "portion_desc"
         case portionG = "portion_g"
         case nutritionScore = "nutrition_score"
@@ -96,6 +118,7 @@ struct Dish: Codable, Equatable {
         needsClarification = try c.decode(Bool.self, forKey: .needsClarification)
         clarificationQuestion = try c.decode(String.self, forKey: .clarificationQuestion)
         clarificationOptions = try c.decode([String].self, forKey: .clarificationOptions)
+        variants = try c.decodeIfPresent([DishVariant].self, forKey: .variants) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -111,6 +134,38 @@ struct Dish: Codable, Equatable {
         try c.encode(needsClarification, forKey: .needsClarification)
         try c.encode(clarificationQuestion, forKey: .clarificationQuestion)
         try c.encode(clarificationOptions, forKey: .clarificationOptions)
+        try c.encode(variants, forKey: .variants)
+    }
+}
+
+/// One resolvable form of an ambiguous dish (e.g. regular vs diet) — a label
+/// plus a full nutrient block. Flat in JSON (nutrients embedded), like Dish.
+struct DishVariant: Codable, Equatable {
+    var label: String
+    var nutrients: Nutrients
+    var nutritionScore: Int
+    var dietQualityScore: Int
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case nutritionScore = "nutrition_score"
+        case dietQualityScore = "diet_quality_score"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        label = try c.decode(String.self, forKey: .label)
+        nutrients = try Nutrients(from: decoder)
+        nutritionScore = try c.decode(Int.self, forKey: .nutritionScore)
+        dietQualityScore = try c.decode(Int.self, forKey: .dietQualityScore)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(label, forKey: .label)
+        try nutrients.encode(to: encoder)
+        try c.encode(nutritionScore, forKey: .nutritionScore)
+        try c.encode(dietQualityScore, forKey: .dietQualityScore)
     }
 }
 
@@ -179,6 +234,8 @@ struct Meal: Codable, Identifiable, Equatable {
     var refinementAnswer: String?
     var scanId: String?
     var dishIndex: Int?
+    var variants: [DishVariant]
+    var variantIndex: Int?
 
     var id: String { mealId }
 
@@ -192,6 +249,8 @@ struct Meal: Codable, Identifiable, Equatable {
         case refinementAnswer = "refinement_answer"
         case scanId = "scan_id"
         case dishIndex = "dish_index"
+        case variants
+        case variantIndex = "variant_index"
     }
 
     init(from decoder: Decoder) throws {
@@ -210,6 +269,8 @@ struct Meal: Codable, Identifiable, Equatable {
         refinementAnswer = try c.decodeIfPresent(String.self, forKey: .refinementAnswer)
         scanId = try c.decodeIfPresent(String.self, forKey: .scanId)
         dishIndex = try c.decodeIfPresent(Int.self, forKey: .dishIndex)
+        variants = try c.decodeIfPresent([DishVariant].self, forKey: .variants) ?? []
+        variantIndex = try c.decodeIfPresent(Int.self, forKey: .variantIndex)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -228,6 +289,8 @@ struct Meal: Codable, Identifiable, Equatable {
         try c.encodeIfPresent(refinementAnswer, forKey: .refinementAnswer)
         try c.encodeIfPresent(scanId, forKey: .scanId)
         try c.encodeIfPresent(dishIndex, forKey: .dishIndex)
+        if !variants.isEmpty { try c.encode(variants, forKey: .variants) }
+        try c.encodeIfPresent(variantIndex, forKey: .variantIndex)
     }
 }
 

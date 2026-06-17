@@ -105,6 +105,39 @@ func (s *Store) TransitionToQueued(ctx context.Context, userID, scanID string, n
 	return true, nil
 }
 
+// RevertToPendingUpload undoes a QUEUED → PENDING_UPLOAD transition. It is the
+// best-effort compensation for an enqueue (SendScan) that failed AFTER
+// TransitionToQueued won: without it the scan is orphaned QUEUED forever (no
+// SQS message, so never processed and never dead-lettered). Reports whether
+// THIS call reverted. The condition pins #st = :queued so it can only undo a
+// still-QUEUED scan — it must never stomp a scan a racing worker has already
+// advanced to PROCESSING/READY/FAILED (in that case the message DID land, so
+// there is nothing to revert and we leave the live processing untouched).
+func (s *Store) RevertToPendingUpload(ctx context.Context, userID, scanID string, now time.Time) (bool, error) {
+	_, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           &s.table,
+		Key:                 scanKey(userID, scanID),
+		UpdateExpression:    aws.String("SET #st = :pending, updated_at = :now"),
+		ConditionExpression: aws.String("attribute_exists(PK) AND #st = :queued"),
+		ExpressionAttributeNames: map[string]string{
+			"#st": "status",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pending": &types.AttributeValueMemberS{Value: string(models.ScanStatusPendingUpload)},
+			":queued":  &types.AttributeValueMemberS{Value: string(models.ScanStatusQueued)},
+			":now":     mustMarshalTime(now),
+		},
+	})
+	if err != nil {
+		var ccf *types.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return false, nil // no longer QUEUED — the message landed or already reverted; nothing to do
+		}
+		return false, fmt.Errorf("revert to pending upload: %w", err)
+	}
+	return true, nil
+}
+
 // SetProcessing is cosmetic UI state. It must never stomp a terminal state
 // on duplicate delivery, hence the condition; conditional failure is ignored.
 func (s *Store) SetProcessing(ctx context.Context, userID, scanID string, now time.Time) {

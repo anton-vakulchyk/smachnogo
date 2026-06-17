@@ -147,6 +147,58 @@ func (p *Processor) analyzeWithPlausibilityRetry(ctx context.Context, log *zap.L
 	return nil, total, errImplausible
 }
 
+// macro-energy gate constants. The ratio (4P+9F+4C)/kcal must sit within
+// [1/ratioBound, ratioBound] of reported kcal, EXCEPT alcoholic drinks whose
+// ethanol energy (~7 kcal/g) lives in none of protein/fat/carbs and so pulls
+// the ratio below the lower bound. See macroEnergyIssue.
+const (
+	macroGateMinKcal = 50  // skip the ratio check below this (drinks, garnishes)
+	ratioBound       = 2.5 // 4P+9F+4C within 2.5x of kcal, both directions
+	// Largest plausible ethanol-attributable remainder for a single serving
+	// (kcal - 4P+9F+4C). A strong large drink is ~24 g ethanol ≈ 170 kcal; 250
+	// is a generous hard cap. A "drink" claiming more unexplained energy than
+	// this is garbage, not alcohol, so the lower-bound relaxation does not apply.
+	maxEthanolRemainderKcal = 250.0
+	drinkMacroEpsilonG      = 1.0 // protein/fat treated as ~0 for the drink signature
+)
+
+// macroEnergyIssue applies the macro-energy plausibility check to one nutrient
+// block and returns a non-empty reason when it is implausible. The UPPER bound
+// is always enforced; the LOWER bound is relaxed for an alcoholic-drink
+// signature — protein≈0, fat≈0, some carbs (real beer/wine residual sugars),
+// and an unexplained remainder consistent with a single serving of ethanol —
+// since ethanol calories legitimately live outside protein/fat/carbs. Blocks at
+// or below macroGateMinKcal (e.g. a 0-kcal Diet variant) are exempt entirely.
+func macroEnergyIssue(n models.Nutrients) string {
+	if n.CaloriesKcal <= macroGateMinKcal {
+		return ""
+	}
+	macroKcal := 4*n.ProteinG + 9*n.FatG + 4*n.CarbsG
+	kcal := float64(n.CaloriesKcal)
+	ratio := macroKcal / kcal
+	if ratio > ratioBound {
+		return fmt.Sprintf("macro-energy mismatch ratio=%.2f", ratio)
+	}
+	if ratio < 1/ratioBound && !isDrinkSignature(n, macroKcal) {
+		return fmt.Sprintf("macro-energy mismatch ratio=%.2f", ratio)
+	}
+	return ""
+}
+
+// isDrinkSignature reports whether a nutrient block looks like an alcoholic
+// drink whose sub-bound macro ratio is explained by ethanol: negligible protein
+// and fat, a positive carb reading (real beer/wine/cocktails carry residual
+// sugars — a 0-macro block is garbage, not a drink), and an unexplained calorie
+// remainder that is positive and within one serving of ethanol.
+func isDrinkSignature(n models.Nutrients, macroKcal float64) bool {
+	remainder := float64(n.CaloriesKcal) - macroKcal
+	return n.ProteinG <= drinkMacroEpsilonG &&
+		n.FatG <= drinkMacroEpsilonG &&
+		n.CarbsG > 0 &&
+		remainder > 0 &&
+		remainder <= maxEthanolRemainderKcal
+}
+
 // plausibilityIssue returns "" for acceptable output. Catches schema-valid
 // garbage: a 0-kcal pizza must not land in a diary the user trusts.
 func plausibilityIssue(a *models.PhotoAnalysis) string {
@@ -160,19 +212,23 @@ func plausibilityIssue(a *models.PhotoAnalysis) string {
 	for i := range a.Dishes {
 		d := &a.Dishes[i]
 		d.Clamp()
+		d.DefaultToFirstVariant() // headline must equal variants[0] before we validate + store it
 		if d.CaloriesKcal > 0 {
 			allZero = false
 		}
 		if d.PortionG <= 0 {
 			return "non-positive portion_g"
 		}
-		// Macro-energy consistency: 4P + 9F + 4C should be within ~2.5x of
-		// reported kcal (alcohol and fiber legitimately skew it).
-		if d.CaloriesKcal > 50 {
-			macroKcal := 4*d.ProteinG + 9*d.FatG + 4*d.CarbsG
-			ratio := macroKcal / float64(d.CaloriesKcal)
-			if ratio > 2.5 || ratio < 1/2.5 {
-				return fmt.Sprintf("macro-energy mismatch ratio=%.2f", ratio)
+		// Macro-energy consistency on the headline the user sees first.
+		if reason := macroEnergyIssue(d.Nutrients); reason != "" {
+			return reason
+		}
+		// Non-default variant blocks (e.g. a Diet/Zero fork) are stored and
+		// logged when the user taps that fork, so hold them to the same numeric
+		// sanity as the headline — a 0-kcal Diet block is naturally exempt.
+		for vi := range d.Variants {
+			if reason := macroEnergyIssue(d.Variants[vi].Nutrients); reason != "" {
+				return fmt.Sprintf("variant %q %s", d.Variants[vi].Label, reason)
 			}
 		}
 	}

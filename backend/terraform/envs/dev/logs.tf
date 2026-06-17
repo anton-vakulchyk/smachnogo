@@ -24,7 +24,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric", x = 8, y = 0, width = 8, height = 6,
         properties = {
-          title = "API latency p95 (ms)", region = "us-east-1", stat = "p95", period = 300,
+          title   = "API latency p95 (ms)", region = "us-east-1", stat = "p95", period = 300,
           metrics = [["AWS/ApiGateway", "Latency", "ApiId", aws_apigatewayv2_api.api.id]]
         }
       },
@@ -62,8 +62,8 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "log", x = 0, y = 12, width = 24, height = 8,
         properties = {
-          title  = "Recent errors (api + worker)", region = "us-east-1",
-          query  = "SOURCE '/aws/lambda/${aws_lambda_function.api.function_name}' | SOURCE '/aws/lambda/${aws_lambda_function.worker.function_name}' | fields @timestamp, msg, error, user_id, scan_id | filter level = 'error' | sort @timestamp desc | limit 50",
+          title = "Recent errors (api + worker)", region = "us-east-1",
+          query = "SOURCE '/aws/lambda/${aws_lambda_function.api.function_name}' | SOURCE '/aws/lambda/${aws_lambda_function.worker.function_name}' | fields @timestamp, msg, error, user_id, scan_id | filter level = 'error' | sort @timestamp desc | limit 50",
         }
       },
     ]

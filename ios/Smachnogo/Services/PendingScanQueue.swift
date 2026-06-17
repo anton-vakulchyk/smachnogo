@@ -171,6 +171,13 @@ final class PendingScanQueue {
             } else if case let APIError.http(status, _, message) = error, status >= 400, status != 408, status != 429 {
                 entry.failureMessage = message
                 update(&entry, .failed)
+            } else if case APIError.decoding = error {
+                // A malformed/partial result (e.g. a missing nutrient) won't
+                // decode. Re-polling can't fix a stored payload, so this is
+                // terminal — mark failed so the retry/discard UI applies
+                // instead of re-polling .awaitingResult forever.
+                entry.failureMessage = friendlyFailure("analysis_implausible")
+                update(&entry, .failed)
             }
         }
     }

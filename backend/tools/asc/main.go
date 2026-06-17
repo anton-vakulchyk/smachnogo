@@ -38,10 +38,10 @@ const (
 	annualID      = "smachnogo.premium.annual"
 	monthlyPrice  = "6.99"
 	annualPrice   = "39.99"
-	reviewNote    = "Unlocks unlimited photo scanning. The text diary is free without it."
+	reviewNote    = "Unlocks photo scanning — point the camera at a meal for calories and nutrition. The text diary stays free without it."
 	monthlyName   = "Premium Monthly"
 	annualName    = "Premium Annual"
-	subscDescript = "Unlimited photo scanning"
+	subscDescript = "Photo calorie & nutrition scanning"
 )
 
 func main() {

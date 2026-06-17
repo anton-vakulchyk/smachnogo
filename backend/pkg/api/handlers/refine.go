@@ -92,6 +92,7 @@ func (h *Scans) Refine(w http.ResponseWriter, r *http.Request) {
 	revised.NeedsClarification = false
 	revised.ClarificationQuestion = ""
 	revised.ClarificationOptions = []string{}
+	revised.Variants = []models.DishVariant{} // a refined dish is resolved — the fork collapses
 	// Description doubles as the durable record of what the user told us.
 	if !strings.Contains(strings.ToLower(revised.Description), strings.ToLower(req.Answer)) {
 		revised.Description = strings.TrimRight(revised.Description, ". ") + ". (" + req.Answer + ")"

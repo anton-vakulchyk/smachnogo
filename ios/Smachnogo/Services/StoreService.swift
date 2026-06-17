@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import CryptoKit
 
 /// StoreKit 2 client: products, purchase, restore, and the server handshake.
 /// Trust model: a locally VERIFIED transaction unlocks the camera
@@ -62,7 +63,10 @@ final class StoreService {
     }
 
     func refreshServerState() async {
-        me = try? await api.get("/v1/users/me")
+        // Keep the last-known value on a transient failure: a network blip
+        // must not blank the scans chip or flip isSubscribed for a user
+        // subscribed on another device (no local StoreKit txn here).
+        if let fresh: UserMe = try? await api.get("/v1/users/me") { me = fresh }
     }
 
     func purchase(_ product: Product) async throws {
@@ -130,9 +134,12 @@ final class StoreService {
     }
 
     private func enqueueReceipt(_ jws: String) {
-        // Filename = hash of contents: the same transaction re-enqueued on
-        // every launch reconcile stays ONE pending file.
-        let name = String(format: "%08x", jws.hashValue) + ".jws"
+        // Filename = stable digest of contents: the same transaction
+        // re-enqueued on every launch reconcile stays ONE pending file.
+        // (String.hashValue is salted per process launch, so it would name
+        // a new file every launch — unbounded files + duplicate POSTs.)
+        let digest = SHA256.hash(data: Data(jws.utf8))
+        let name = digest.map { String(format: "%02x", $0) }.joined() + ".jws"
         let url = Self.receiptsDir.appendingPathComponent(name)
         try? jws.data(using: .utf8)?.write(to: url)
     }

@@ -9,6 +9,7 @@ struct MealEditSheet: View {
 
     @State private var label: String
     @State private var portionFactor: Double
+    @State private var variantIndex: Int
     @State private var date: Date
     @State private var isPlanned: Bool
     @State private var working = false
@@ -26,6 +27,7 @@ struct MealEditSheet: View {
         self.onChanged = onChanged
         _label = State(initialValue: meal.label)
         _portionFactor = State(initialValue: meal.portionFactor)
+        _variantIndex = State(initialValue: meal.variantIndex ?? 0)
         _date = State(initialValue: Self.parse(meal.date))
         _isPlanned = State(initialValue: meal.state == "planned")
     }
@@ -35,6 +37,17 @@ struct MealEditSheet: View {
             Form {
                 Section("Meal") {
                     TextField("Name", text: $label)
+                    if meal.variants.count > 1 {
+                        HStack(spacing: 6) {
+                            ForEach(meal.variants.indices, id: \.self) { v in
+                                Button(meal.variants[v].label) { variantIndex = v }
+                                    .font(.caption.weight(variantIndex == v ? .bold : .regular))
+                                    .buttonStyle(.bordered)
+                                    .tint(variantIndex == v ? .accentColor : .secondary)
+                                    .controlSize(.mini)
+                            }
+                        }
+                    }
                     HStack(spacing: 6) {
                         Text("Ate").font(.caption).foregroundStyle(.secondary)
                         ForEach(Self.portionChoices, id: \.0) { (chip, value) in
@@ -82,7 +95,13 @@ struct MealEditSheet: View {
 
     private var scaledPreviewKcal: Int {
         // Client preview only — the server rescales from the true base.
-        let base = meal.portionFactor > 0 ? Double(meal.nutrients.caloriesKcal) / meal.portionFactor : 0
+        let base: Double
+        if !meal.variants.isEmpty {
+            let v = min(max(variantIndex, 0), meal.variants.count - 1)
+            base = Double(meal.variants[v].nutrients.caloriesKcal)
+        } else {
+            base = meal.portionFactor > 0 ? Double(meal.nutrients.caloriesKcal) / meal.portionFactor : 0
+        }
         return Int((base * portionFactor).rounded())
     }
 
@@ -92,6 +111,7 @@ struct MealEditSheet: View {
         var req = MealService.PatchRequest()
         if label != meal.label { req.label = label }
         if abs(portionFactor - meal.portionFactor) > 0.001 { req.portionFactor = portionFactor }
+        if variantIndex != (meal.variantIndex ?? 0) { req.variantIndex = variantIndex }
         let newDay = DateUtil.dayString(date)
         if newDay != meal.date { req.newDate = newDay }
         let newState = isPlanned ? "planned" : "logged"

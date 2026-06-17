@@ -88,7 +88,7 @@ func Load() (*Config, error) {
 		ClarifyThreshold: getfloat("CLARIFY_THRESHOLD", 0.6),
 
 		EntitlementMode:     getenv("ENTITLEMENT_MODE", "enforce"),
-		FreeScanAllowance:   getint("FREE_SCAN_ALLOWANCE", 10),
+		FreeScanAllowance:   getint("FREE_SCAN_ALLOWANCE", 1000),
 		FreeWindowDays:      getint("FREE_WINDOW_DAYS", 7),
 		DailyEstimateCapSub: getint("DAILY_ESTIMATE_CAP_SUB", 50),
 

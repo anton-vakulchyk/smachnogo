@@ -39,7 +39,45 @@ func dishProperties() map[string]any {
 		"clarification_question": map[string]any{"type": "string", "description": "one short question; empty string when not needed"},
 		"clarification_options": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
 			"description": "3-4 short tappable answers; empty array when not needed"},
+		"variants": map[string]any{
+			"type":        "array",
+			"description": "closed look-alike forks the photo can't resolve (regular vs diet/zero soda, sweetened vs unsweetened tea, whole vs skim milk): 2-3 {label, all nutrient fields, both scores} objects MOST-CALORIC FIRST with variants[0] equal to this dish; empty array otherwise; never for portion size or open-ended hidden contents",
+			"items": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required":             variantRequired,
+				"properties":           variantProperties(),
+			},
+		},
 	}
+}
+
+// variantProperties is the schema for one DishVariant: a label plus the same
+// nutrient + score fields a dish carries. Kept field-for-field in sync with
+// models.DishVariant by TestVariantSchemaMatchesStruct.
+func variantProperties() map[string]any {
+	return map[string]any{
+		"label":              map[string]any{"type": "string", "description": "name of this form, e.g. 'Regular' or 'Diet / Zero'"},
+		"calories_kcal":      map[string]any{"type": "integer"},
+		"protein_g":          map[string]any{"type": "number"},
+		"fat_g":              map[string]any{"type": "number"},
+		"carbs_g":            map[string]any{"type": "number"},
+		"fiber_g":            map[string]any{"type": "number"},
+		"sugar_g":            map[string]any{"type": "number"},
+		"sodium_mg":          map[string]any{"type": "number"},
+		"saturated_fat_g":    map[string]any{"type": "number"},
+		"iron_mg":            map[string]any{"type": "number"},
+		"calcium_mg":         map[string]any{"type": "number"},
+		"omega3_g":           map[string]any{"type": "number"},
+		"nutrition_score":    map[string]any{"type": "integer", "description": "0-100"},
+		"diet_quality_score": map[string]any{"type": "integer", "description": "0-100"},
+	}
+}
+
+var variantRequired = []string{
+	"label", "calories_kcal", "protein_g", "fat_g", "carbs_g",
+	"fiber_g", "sugar_g", "sodium_mg", "saturated_fat_g", "iron_mg", "calcium_mg", "omega3_g",
+	"nutrition_score", "diet_quality_score",
 }
 
 var dishRequired = []string{
@@ -47,7 +85,7 @@ var dishRequired = []string{
 	"calories_kcal", "protein_g", "fat_g", "carbs_g",
 	"fiber_g", "sugar_g", "sodium_mg", "saturated_fat_g", "iron_mg", "calcium_mg", "omega3_g",
 	"nutrition_score", "diet_quality_score", "confidence",
-	"needs_clarification", "clarification_question", "clarification_options",
+	"needs_clarification", "clarification_question", "clarification_options", "variants",
 }
 
 // PhotoAnalysis returns the vision-call schema.

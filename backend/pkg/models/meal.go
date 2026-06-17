@@ -35,10 +35,16 @@ type Meal struct {
 	Components       []EstimateItem `json:"components,omitempty" dynamodbav:"components,omitempty"`
 	ScanID           string         `json:"scan_id,omitempty" dynamodbav:"scan_id,omitempty"`
 	DishIndex        *int           `json:"dish_index,omitempty" dynamodbav:"dish_index,omitempty"`
-	PhotoS3Key       string         `json:"photo_s3_key,omitempty" dynamodbav:"photo_s3_key,omitempty"`
-	SchemaVersion    int            `json:"schema_version" dynamodbav:"schema_version"`
-	CreatedAt        time.Time      `json:"created_at" dynamodbav:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at" dynamodbav:"updated_at"`
+	// Variants are denormalized from the scan dish at confirm so a
+	// regular/diet pick stays switchable after the scan TTLs out (Nutrients
+	// above = Variants[VariantIndex] scaled by PortionFactor). Empty for
+	// non-fork meals; VariantIndex nil unless this meal had a fork.
+	Variants      []DishVariant `json:"variants,omitempty" dynamodbav:"variants,omitempty"`
+	VariantIndex  *int          `json:"variant_index,omitempty" dynamodbav:"variant_index,omitempty"`
+	PhotoS3Key    string        `json:"photo_s3_key,omitempty" dynamodbav:"photo_s3_key,omitempty"`
+	SchemaVersion int           `json:"schema_version" dynamodbav:"schema_version"`
+	CreatedAt     time.Time     `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at" dynamodbav:"updated_at"`
 }
 
-const MealSchemaVersion = 1
+const MealSchemaVersion = 2

@@ -43,6 +43,22 @@ type Dish struct {
 	NeedsClarification    bool     `json:"needs_clarification" dynamodbav:"needs_clarification"`
 	ClarificationQuestion string   `json:"clarification_question" dynamodbav:"clarification_question"`
 	ClarificationOptions  []string `json:"clarification_options" dynamodbav:"clarification_options"`
+
+	// Variants: closed look-alike forks the photo can't resolve (regular vs
+	// diet/zero soda, sweetened vs unsweetened tea, whole vs skim milk). 2-3
+	// full nutrient+score blocks, MOST-CALORIC FIRST; variants[0] equals this
+	// dish (the default the user sees). Empty for unambiguous food — the client
+	// swaps a pick in with zero recompute and it persists onto the meal.
+	Variants []DishVariant `json:"variants" dynamodbav:"variants,omitempty"`
+}
+
+// DishVariant is one resolvable form of an ambiguous dish — a label plus a
+// full nutrient+score block (the same wire shape the dish's own nutrients use,
+// so the client swaps it in instantly and the choice persists onto the meal).
+type DishVariant struct {
+	Label string `json:"label" dynamodbav:"label"`
+	Nutrients
+	Scores
 }
 
 type ImageQuality string
@@ -193,6 +209,32 @@ func (d *Dish) Clamp() {
 	d.Nutrients.clampNegatives()
 	if d.ClarificationOptions == nil {
 		d.ClarificationOptions = []string{}
+	}
+	for i := range d.Variants {
+		d.Variants[i].clamp()
+	}
+	if d.Variants == nil {
+		d.Variants = []DishVariant{}
+	}
+}
+
+// clamp normalizes a variant block in place (scores into [0,100], negatives
+// to 0) — the same rule Clamp applies to the dish's headline nutrients.
+func (v *DishVariant) clamp() {
+	v.NutritionScore = clampScore(v.NutritionScore)
+	v.DietQualityScore = clampScore(v.DietQualityScore)
+	v.Nutrients.clampNegatives()
+}
+
+// DefaultToFirstVariant makes the dish's headline nutrients+scores equal to
+// variants[0] — the most-caloric form the model is told to list first — so the
+// default estimate and the user's pickable options never disagree. No-op when
+// the dish has no variants. Applied at analysis ingestion only (NOT inside
+// Clamp): the confirm/refine paths intentionally carry a non-default headline.
+func (d *Dish) DefaultToFirstVariant() {
+	if len(d.Variants) > 0 {
+		d.Nutrients = d.Variants[0].Nutrients
+		d.Scores = d.Variants[0].Scores
 	}
 }
 

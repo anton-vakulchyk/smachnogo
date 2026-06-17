@@ -55,4 +55,4 @@ type Scan struct {
 	ExpiresAt       int64                    `json:"-" dynamodbav:"expires_at"` // DDB TTL, epoch seconds
 }
 
-const ResultVersion = 1
+const ResultVersion = 2

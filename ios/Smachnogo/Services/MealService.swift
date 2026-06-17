@@ -65,11 +65,13 @@ struct MealService: Sendable {
         var state: String?
         var consumedAt: String?
         var portionFactor: Double?
+        var variantIndex: Int?
         var newDate: String?
         enum CodingKeys: String, CodingKey {
             case label, state
             case consumedAt = "consumed_at"
             case portionFactor = "portion_factor"
+            case variantIndex = "variant_index"
             case newDate = "new_date"
         }
     }

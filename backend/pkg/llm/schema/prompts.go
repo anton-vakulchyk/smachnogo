@@ -4,7 +4,7 @@ package schema
 // golden image set. Authored tight — no indentation/markdown filler; every
 // line is paid input tokens on every call.
 
-const PromptVersion = 1
+const PromptVersion = 2
 
 // VisionSystem carries all analysis rules. Sent as the system role (with the
 // schema) so the fixed prefix is cacheable where the provider supports it;
@@ -16,6 +16,7 @@ Hidden calories: include typical preparation fat for the visible cooking method 
 Packaging: read visible labels. Brand names, claims like "20g protein", and legible nutrition-facts panels are evidence - use them. A readable label means high confidence and no clarification.
 Opaque or hidden contents (shakes, smoothies, soups, burritos, sandwiches, unreadable wrappers): state your assumption inside description (e.g. "assumed whey with semi-skim milk") and price the estimate at that assumption.
 Clarification: set needs_clarification=true ONLY when plausible contents differ by more than ~25% calories. Provide one short question and 3-4 short concrete tappable options. Never ask about obvious foods. Otherwise set the question to "" and options to [].
+Variants: when ONE visible item could be 2-3 look-identical forms differing by more than ~25% calories (regular vs diet/zero soda, sweetened vs unsweetened tea, whole vs skim milk), fill variants with those {label, all nutrient fields, both scores} objects MOST-CALORIC FIRST and set this dish's own nutrient and score fields equal to variants[0]; also set needs_clarification with a short question. Otherwise variants=[]. Variants are for closed look-alike forks only, never for portion size or open-ended hidden contents (shakes, burritos).
 Scores: nutrition_score (0-100) = nutrient density of the dish. diet_quality_score (0-100) = fit with a healthy diet pattern: penalize heavy processing, added sugar, refined carbs, high sodium. Scores must be consistent with the nutrient numbers you report.
 description: ONE short sentence. confidence: 0.0-1.0 over identification and portion together.
 If the image contains no food or drink: is_food=false, dishes=[].`
@@ -34,4 +35,4 @@ If the text does not describe food or drink: is_food=false, items=[].`
 // answer about its contents.
 const RefineSystem = `You revise a single dish estimate for a calorie-tracking app. You receive the original dish JSON (estimated from a photo with an assumption) and the user's answer describing what is actually in it.
 Re-estimate every nutrient field for the same visible portion, honoring the user's answer. Keep label close to the original unless the answer changes the dish identity. Update description to reflect the answer. Raise confidence (the user told you the contents).
-Set needs_clarification=false, clarification_question="", clarification_options=[].`
+Set needs_clarification=false, clarification_question="", clarification_options=[], variants=[].`

@@ -19,6 +19,7 @@ type patchMealReq struct {
 	State         *string  `json:"state"`
 	ConsumedAt    *string  `json:"consumed_at"`
 	PortionFactor *float64 `json:"portion_factor"`
+	VariantIndex  *int     `json:"variant_index"` // switch the regular/diet fork on a fork meal
 	NewDate       *string  `json:"new_date"`
 }
 
@@ -72,18 +73,35 @@ func (h *Meals) Patch(w http.ResponseWriter, r *http.Request) {
 	if req.ConsumedAt != nil {
 		meal.ConsumedAt = *req.ConsumedAt
 	}
-	if req.PortionFactor != nil {
-		f := *req.PortionFactor
-		if f <= 0 || f > 10 {
-			writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "portion_factor must be in (0, 10]")
+	if req.VariantIndex != nil {
+		if len(meal.Variants) == 0 {
+			writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "meal has no variants to switch")
 			return
+		}
+		vi := *req.VariantIndex
+		if vi < 0 || vi >= len(meal.Variants) {
+			writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "variant_index out of range")
+			return
+		}
+		meal.VariantIndex = &vi
+	}
+	// A variant switch and/or a portion change both rescale from the BASE
+	// estimate (the chosen variant for fork meals) — never compounding the
+	// stored, already-scaled values.
+	if req.PortionFactor != nil || req.VariantIndex != nil {
+		f := meal.PortionFactor
+		if req.PortionFactor != nil {
+			f = *req.PortionFactor
+			if f <= 0 || f > 10 {
+				writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "portion_factor must be in (0, 10]")
+				return
+			}
 		}
 		base, scores, ok := h.baseNutrients(r, userID, meal)
 		if !ok {
 			return // response already written
 		}
-		scaled := base.ScaledBy(f)
-		meal.Nutrients = scaled
+		meal.Nutrients = base.ScaledBy(f)
 		meal.Scores = scores
 		meal.PortionFactor = f
 	}
@@ -122,6 +140,16 @@ func (h *Meals) Patch(w http.ResponseWriter, r *http.Request) {
 // meals, else divide-back from the stored values. Rescales NEVER compound —
 // always from base.
 func (h *Meals) baseNutrients(r *http.Request, userID string, meal *models.Meal) (models.Nutrients, models.Scores, bool) {
+	// Fork meals carry their own variant blocks denormalized at confirm: the
+	// chosen variant IS the base. This wins over the scan lookup — TTL-proof,
+	// and correct even while the scan lives (its top-level dish is variants[0],
+	// not necessarily the variant the user picked).
+	if len(meal.Variants) > 0 && meal.VariantIndex != nil {
+		if vi := *meal.VariantIndex; vi >= 0 && vi < len(meal.Variants) {
+			v := meal.Variants[vi]
+			return v.Nutrients, v.Scores, true
+		}
+	}
 	if meal.ScanID != "" && meal.DishIndex != nil {
 		scan, err := h.Store.GetScan(r.Context(), userID, meal.ScanID)
 		if err == nil && scan.Result != nil && *meal.DishIndex < len(scan.Result.Dishes) {

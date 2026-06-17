@@ -66,9 +66,11 @@ struct ScanService: Sendable {
     struct ConfirmDish: Codable {
         var index: Int
         var portionFactor: Double
+        var variantIndex: Int? // nil → default (0); only for dishes with variants
         enum CodingKeys: String, CodingKey {
             case index
             case portionFactor = "portion_factor"
+            case variantIndex = "variant_index"
         }
     }
 

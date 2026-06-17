@@ -25,6 +25,13 @@ const (
 // Consume atomically increments the day's counter, failing when at cap.
 // One conditional UpdateItem — race-safe under concurrent requests.
 func (s *Store) Consume(ctx context.Context, userID, date string, kind QuotaKind, cap int, nowEpoch int64) error {
+	// The condition's attribute_not_exists(#k) arm treats a missing counter as
+	// under-cap — true for any cap ≥ 1, wrong for a zero cap: the first request
+	// of the day short-circuits TRUE and ADD seeds #k=1, granting one scan that
+	// a zero cap forbids. Zero never consumes. Mirrors ConsumeFreeScan's guard.
+	if cap <= 0 {
+		return ErrQuotaExceeded
+	}
 	_, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &s.table,
 		Key: map[string]types.AttributeValue{

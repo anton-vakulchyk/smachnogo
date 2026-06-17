@@ -47,15 +47,15 @@ resource "aws_iam_role_policy_attachment" "presignup_logs" {
 }
 
 resource "aws_lambda_function" "presignup" {
-  function_name = "${local.prefix}-presignup-${var.env}"
-  role          = aws_iam_role.presignup.arn
-  architectures = ["arm64"]
-  runtime       = "provided.al2023"
-  handler       = "bootstrap"
-  filename      = "${path.module}/../../../bin/presignup.zip"
+  function_name    = "${local.prefix}-presignup-${var.env}"
+  role             = aws_iam_role.presignup.arn
+  architectures    = ["arm64"]
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  filename         = "${path.module}/../../../bin/presignup.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/presignup.zip")
-  memory_size   = 128
-  timeout       = 5
+  memory_size      = 128
+  timeout          = 5
 }
 
 resource "aws_lambda_permission" "cognito_presignup" {

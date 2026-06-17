@@ -90,7 +90,7 @@ struct SettingsView: View {
                         Button {
                             showPaywall = true
                         } label: {
-                            Label("Go unlimited", systemImage: "camera.viewfinder")
+                            Label("Go Premium", systemImage: "camera.viewfinder")
                         }
                     }
                     Button {
@@ -219,6 +219,9 @@ struct SettingsView: View {
         Task {
             do {
                 try await service.deleteAccount()
+                // Account wiped — clear local onboarding state so the diary
+                // empty state returns to first-run ("Add your first meal").
+                UserDefaults.standard.removeObject(forKey: "hasLoggedAnyMeal")
                 deleted = true
             } catch {
                 errorText = error.localizedDescription

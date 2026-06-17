@@ -12,6 +12,7 @@ struct ScanFlowView: View {
     @State private var queue = PendingScanQueue.shared
     @State private var job: ScanJob?
     @State private var fetchingJob = false
+    @State private var fetchError: String?
     @State private var showPaywall = false
     @Environment(\.dismiss) private var dismiss
 
@@ -31,19 +32,31 @@ struct ScanFlowView: View {
                 }
         }
         .task(id: entry?.step) {
-            if entry?.step == .awaitingSelection && job == nil && !fetchingJob {
-                fetchingJob = true
-                do {
-                    job = try await ScanService().getScan(scanId: scanId)
-                } catch let APIError.http(status, _, _) where status == 404 {
-                    // Scan belongs to a previous identity (or TTL'd out) —
-                    // the entry is unrecoverable; clean it up.
-                    queue.discard(scanId)
-                    dismiss()
-                } catch {}
-                fetchingJob = false
+            if entry?.step == .awaitingSelection && job == nil && !fetchingJob && fetchError == nil {
+                await fetchJob()
             }
         }
+    }
+
+    /// Fetch the READY job so the result sheet can render. A failure here —
+    /// most plausibly a malformed/partial result that won't decode — must be
+    /// terminal with a Retry, never a perpetual "Loading result…" spinner.
+    private func fetchJob() async {
+        fetchingJob = true
+        fetchError = nil
+        do {
+            job = try await ScanService().getScan(scanId: scanId)
+        } catch let APIError.http(status, _, _) where status == 404 {
+            // Scan belongs to a previous identity (or TTL'd out) —
+            // the entry is unrecoverable; clean it up.
+            queue.discard(scanId)
+            dismiss()
+        } catch {
+            // Decode/transport failure: surface a recoverable error instead
+            // of falling through to the infinite spinner. Retry re-fetches.
+            fetchError = error.localizedDescription
+        }
+        fetchingJob = false
     }
 
     private var dismissLabel: String {
@@ -68,6 +81,8 @@ struct ScanFlowView: View {
                     onSaved(meals)
                     dismiss()
                 }
+            } else if fetchError != nil {
+                resultError
             } else {
                 progress("Loading result…")
             }
@@ -113,6 +128,26 @@ struct ScanFlowView: View {
         case nil:
             // Entry gone (saved or discarded elsewhere).
             Color.clear.onAppear { dismiss() }
+        }
+    }
+
+    /// READY but the result couldn't be loaded/parsed. The scan is kept;
+    /// Retry re-fetches. Discard removes it (the photo is recoverable from
+    /// the diary's pending section if it lingers).
+    private var resultError: some View {
+        ContentUnavailableView {
+            Label("Couldn't load result", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Your meal was scanned, but the result couldn't be shown. Your photo is kept — try again.")
+        } actions: {
+            Button("Retry") {
+                Task { await fetchJob() }
+            }
+            .buttonStyle(.borderedProminent)
+            Button("Discard", role: .destructive) {
+                queue.discard(scanId)
+                dismiss()
+            }
         }
     }
 

@@ -71,7 +71,7 @@ struct PaywallView: View {
         case "window_expired": return "Your free week ended"
         case "scans_exhausted": return "You've used your free scans"
         case "device_already_used": return "This device used its free scans"
-        default: return "Unlimited photo scanning"
+        default: return "Scan meals with your camera"
         }
     }
 

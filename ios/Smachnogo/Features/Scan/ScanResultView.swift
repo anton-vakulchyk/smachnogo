@@ -13,6 +13,7 @@ struct ScanResultView: View {
     @State private var dishes: [Dish] // refined dishes replace entries in place
     @State private var selected: Set<Int>
     @State private var portions: [Int: Double] = [:]
+    @State private var selectedVariant: [Int: Int] = [:] // dish index → chosen variant (regular/diet)
     @State private var date: Date
     @State private var saving = false
     @State private var saveError: String?
@@ -131,7 +132,7 @@ struct ScanResultView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(dish.label).font(.headline)
                         Text(dish.description).font(.footnote).foregroundStyle(.secondary)
-                        Text("\(dish.portionDesc) · \(scaledKcal(dish, factor)) kcal")
+                        Text("\(dish.portionDesc) · \(scaledKcal(i, factor)) kcal")
                             .font(.subheadline)
                         if dish.confidence < 0.6 {
                             Label("Rough estimate", systemImage: "questionmark.circle")
@@ -155,12 +156,22 @@ struct ScanResultView: View {
                     }
                 }
 
-                if dish.needsClarification && dish.confidence < 0.6 {
-                    clarificationRow(i, dish)
+                // Variants and open-ended clarification are independent: a
+                // forkable dish can ALSO be ambiguous. Show the fork whenever
+                // variants exist; additionally expose the refine path when the
+                // dish needs clarification. When both are present the variant
+                // chips already ARE the fork (the common cola case), so we
+                // suppress the clarification question/chips and keep only the
+                // free-text "or type what's in it" escape hatch — no double-ask.
+                if !dish.variants.isEmpty {
+                    variantRow(i, dish)
+                }
+                if dish.needsClarification {
+                    clarificationRow(i, dish, variantsPresent: !dish.variants.isEmpty)
                 }
 
                 DisclosureGroup("Nutrients") {
-                    nutrientsGrid(dish.nutrients.scaled(factor))
+                    nutrientsGrid(baseNutrients(i).scaled(factor))
                 }
                 .font(.footnote)
             }
@@ -170,8 +181,13 @@ struct ScanResultView: View {
 
     /// The refine affordance — never blocks saving; one question, tappable
     /// chips, optional free text. "Same as last time" reuses a past answer.
+    ///
+    /// When `variantsPresent`, the variant fork above already poses the
+    /// question and offers the choices, so we drop the redundant question +
+    /// chips and show only the free-text escape hatch (for contents the fork
+    /// doesn't cover) — keeping the common cola case from double-asking.
     @ViewBuilder
-    private func clarificationRow(_ i: Int, _ dish: Dish) -> some View {
+    private func clarificationRow(_ i: Int, _ dish: Dish, variantsPresent: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if refining.contains(i) {
                 HStack(spacing: 8) {
@@ -179,24 +195,26 @@ struct ScanResultView: View {
                     Text("Updating estimate…").font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                Text(dish.clarificationQuestion)
-                    .font(.footnote.weight(.medium))
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        if let last = lastTimeAnswers[dish.label.lowercased()] {
-                            Button("Same as last time") { refine(i, answer: last) }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.mini)
-                        }
-                        ForEach(dish.clarificationOptions, id: \.self) { option in
-                            Button(option) { refine(i, answer: option) }
-                                .buttonStyle(.bordered)
-                                .controlSize(.mini)
+                if !variantsPresent {
+                    Text(dish.clarificationQuestion)
+                        .font(.footnote.weight(.medium))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            if let last = lastTimeAnswers[dish.label.lowercased()] {
+                                Button("Same as last time") { refine(i, answer: last) }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.mini)
+                            }
+                            ForEach(dish.clarificationOptions, id: \.self) { option in
+                                Button(option) { refine(i, answer: option) }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.mini)
+                            }
                         }
                     }
                 }
                 HStack {
-                    TextField("Or type what's in it…", text: Binding(
+                    TextField(variantsPresent ? "Something else? Type what's in it…" : "Or type what's in it…", text: Binding(
                         get: { freeTextAnswer[i] ?? "" },
                         set: { freeTextAnswer[i] = $0 }
                     ))
@@ -228,13 +246,53 @@ struct ScanResultView: View {
         }
     }
 
-    private func scaledKcal(_ dish: Dish, _ factor: Double) -> Int {
-        Int((Double(dish.nutrients.caloriesKcal) * factor).rounded())
+    /// Instant regular/diet fork picker — mirrors the portion chips, no
+    /// network. Each variant carries its own precomputed nutrients.
+    @ViewBuilder
+    private func variantRow(_ i: Int, _ dish: Dish) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(dish.clarificationQuestion.isEmpty ? "Which one is it?" : dish.clarificationQuestion)
+                .font(.footnote.weight(.medium))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(dish.variants.indices, id: \.self) { v in
+                        let picked = (selectedVariant[i] ?? 0) == v
+                        Button {
+                            selectedVariant[i] = v
+                        } label: {
+                            VStack(spacing: 1) {
+                                Text(dish.variants[v].label)
+                                Text("\(dish.variants[v].nutrients.caloriesKcal) kcal").font(.caption2)
+                            }
+                        }
+                        .font(.caption.weight(picked ? .bold : .regular))
+                        .buttonStyle(.bordered)
+                        .tint(picked ? .accentColor : .secondary)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Base (unscaled) nutrients for a dish: the chosen variant when it's a
+    /// regular/diet fork, else the dish's own estimate.
+    private func baseNutrients(_ i: Int) -> Nutrients {
+        let d = dishes[i]
+        guard !d.variants.isEmpty else { return d.nutrients }
+        let s = min(max(selectedVariant[i] ?? 0, 0), d.variants.count - 1)
+        return d.variants[s].nutrients
+    }
+
+    private func scaledKcal(_ i: Int, _ factor: Double) -> Int {
+        Int((Double(baseNutrients(i).caloriesKcal) * factor).rounded())
     }
 
     private var selectedTotals: Nutrients {
         selected.reduce(Nutrients.zero) { acc, i in
-            acc + dishes[i].nutrients.scaled(portions[i] ?? 1.0)
+            acc + baseNutrients(i).scaled(portions[i] ?? 1.0)
         }
     }
 
@@ -277,13 +335,16 @@ struct ScanResultView: View {
     private func save() {
         saving = true
         saveError = nil
-        let dishes = selected.sorted().map {
-            ScanService.ConfirmDish(index: $0, portionFactor: portions[$0] ?? 1.0)
+        let confirmDishes = selected.sorted().map { i in
+            ScanService.ConfirmDish(
+                index: i,
+                portionFactor: portions[i] ?? 1.0,
+                variantIndex: dishes[i].variants.isEmpty ? nil : (selectedVariant[i] ?? 0))
         }
         let day = DateUtil.dayString(date)
         Task {
             do {
-                let meals = try await ScanService().confirm(scanId: scanId, dishes: dishes, date: day)
+                let meals = try await ScanService().confirm(scanId: scanId, dishes: confirmDishes, date: day)
                 onSaved(meals)
             } catch {
                 saveError = error.localizedDescription

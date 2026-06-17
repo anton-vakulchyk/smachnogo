@@ -28,6 +28,22 @@ variable "daily_estimate_cap" {
   default = 20
 }
 
+# Total free photo scans before the paywall. Configurable; beta-generous so
+# testers (and early users) can keep scanning while subscriptions aren't yet
+# purchasable. Subscribers and free users alike stay bounded by daily_scan_cap.
+variable "free_scan_allowance" {
+  type    = number
+  default = 1000
+}
+
+# Free-allowance window in days. Set large during beta so the 1000-scan
+# allowance — not a 7-day clock — is the binding limit. Dial back toward the
+# 7-day product design at launch.
+variable "free_window_days" {
+  type    = number
+  default = 3650
+}
+
 variable "llm_provider" {
   type    = string
   default = "gemini"

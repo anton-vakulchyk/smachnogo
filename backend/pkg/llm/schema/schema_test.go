@@ -54,6 +54,30 @@ func TestDishSchemaMatchesStruct(t *testing.T) {
 	}
 }
 
+// TestVariantSchemaMatchesStruct guards the DishVariant contract the same way
+// TestDishSchemaMatchesStruct guards Dish — the variant item schema and
+// models.DishVariant must not drift.
+func TestVariantSchemaMatchesStruct(t *testing.T) {
+	props := variantProperties()
+	var schemaKeys []string
+	for k := range props {
+		schemaKeys = append(schemaKeys, k)
+	}
+	structKeys := jsonFields(t, reflect.TypeOf(models.DishVariant{}))
+
+	sort.Strings(schemaKeys)
+	sort.Strings(structKeys)
+	if !reflect.DeepEqual(schemaKeys, structKeys) {
+		t.Fatalf("variant schema/struct drift:\nschema: %v\nstruct: %v", schemaKeys, structKeys)
+	}
+
+	req := append([]string{}, variantRequired...)
+	sort.Strings(req)
+	if !reflect.DeepEqual(req, schemaKeys) {
+		t.Fatalf("every variant property must be required:\nrequired: %v\nprops:    %v", req, schemaKeys)
+	}
+}
+
 func TestSchemasMarshalMinified(t *testing.T) {
 	for name, s := range map[string]map[string]any{
 		"photo": PhotoAnalysis(), "dish": Dish(), "text": TextEstimate(),

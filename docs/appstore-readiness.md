@@ -64,7 +64,7 @@ Not collected: name, email, phone, precise location (GPS is stripped on-device),
 
 | Item | Notes |
 |---|---|
-| Entitlement layer live in BOTH envs (`ENTITLEMENT_MODE=enforce`) | 10 free scans / 7 days → 402 PAYWALL w/ reason; subscriber daily cap 20; text diary free forever |
+| Entitlement layer live in BOTH envs (`ENTITLEMENT_MODE=enforce`) | Free scans (`FREE_SCAN_ALLOWANCE`, beta-set to 1000) within a window (`FREE_WINDOW_DAYS`, beta-set large so scans, not the clock, bind) → 402 PAYWALL w/ reason; subscriber **and** free users daily-capped at 20 (`DAILY_SCAN_CAP`) — "unlimited" copy removed; text diary free forever |
 | Failed/not-food scans refund BOTH counters | verified through the real deployed worker |
 | StoreKit 2 server side | `POST /v1/subscriptions/receipt` (JWS verified vs Apple root via go-iap), webhook w/ notificationUUID dedup + signedDate ordering + appAccountToken attribution + restore/transfer (latest claim wins) — full lifecycle e2e'd on dev (subscribe → scan → expire → 402, replay + out-of-order dropped) |
 | Prod webhook rejects unverified JWS (401) | dev runs `insecure_dev` decode for Xcode-signed test transactions; config refuses that mode in prod |

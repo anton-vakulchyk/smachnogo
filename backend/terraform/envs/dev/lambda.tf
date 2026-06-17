@@ -4,31 +4,33 @@
 # never enter tfstate.
 locals {
   common_env = {
-    ENV                = var.env
-    TABLE_NAME         = aws_dynamodb_table.main.name
-    BUCKET             = aws_s3_bucket.photos.bucket
-    QUEUE_URL          = aws_sqs_queue.scans.url
-    SSM_PREFIX         = "/${local.prefix}/${var.env}"
-    LLM_PROVIDER       = var.llm_provider
-    LLM_MODEL_VISION   = var.llm_model_vision
-    LLM_MODEL_TEXT     = var.llm_model_text
-    DAILY_SCAN_CAP     = tostring(var.daily_scan_cap)
-    DAILY_ESTIMATE_CAP = tostring(var.daily_estimate_cap)
-    SCANS_ENABLED      = "true" # fallback only — the SSM parameter wins (apply can't un-kill)
-    ENTITLEMENT_MODE   = var.entitlement_mode
+    ENV                 = var.env
+    TABLE_NAME          = aws_dynamodb_table.main.name
+    BUCKET              = aws_s3_bucket.photos.bucket
+    QUEUE_URL           = aws_sqs_queue.scans.url
+    SSM_PREFIX          = "/${local.prefix}/${var.env}"
+    LLM_PROVIDER        = var.llm_provider
+    LLM_MODEL_VISION    = var.llm_model_vision
+    LLM_MODEL_TEXT      = var.llm_model_text
+    DAILY_SCAN_CAP      = tostring(var.daily_scan_cap)
+    DAILY_ESTIMATE_CAP  = tostring(var.daily_estimate_cap)
+    SCANS_ENABLED       = "true" # fallback only — the SSM parameter wins (apply can't un-kill)
+    ENTITLEMENT_MODE    = var.entitlement_mode
+    FREE_SCAN_ALLOWANCE = tostring(var.free_scan_allowance)
+    FREE_WINDOW_DAYS    = tostring(var.free_window_days)
   }
 }
 
 resource "aws_lambda_function" "api" {
-  function_name = "${local.prefix}-api-${var.env}"
-  role          = aws_iam_role.api.arn
-  architectures = ["arm64"]
-  runtime       = "provided.al2023"
-  handler       = "bootstrap"
-  filename      = "${path.module}/../../../bin/api.zip"
+  function_name    = "${local.prefix}-api-${var.env}"
+  role             = aws_iam_role.api.arn
+  architectures    = ["arm64"]
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  filename         = "${path.module}/../../../bin/api.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/api.zip")
-  memory_size   = 256
-  timeout       = 28 # under API GW's 30s hard cap
+  memory_size      = 256
+  timeout          = 28 # under API GW's 30s hard cap
 
   environment {
     variables = merge(local.common_env, {
@@ -36,22 +38,28 @@ resource "aws_lambda_function" "api" {
       AUTH_MODE            = var.auth_mode
       APPSTORE_VERIFY_MODE = var.appstore_verify_mode
       APPLE_VERIFY_MODE    = var.apple_verify_mode
-      COGNITO_POOL_ID   = aws_cognito_user_pool.main.id
-      COGNITO_CLIENT_ID = aws_cognito_user_pool_client.ios.id
+      COGNITO_POOL_ID      = aws_cognito_user_pool.main.id
+      COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.ios.id
     })
   }
 }
 
 resource "aws_lambda_function" "worker" {
-  function_name = "${local.prefix}-scanworker-${var.env}"
-  role          = aws_iam_role.worker.arn
-  architectures = ["arm64"]
-  runtime       = "provided.al2023"
-  handler       = "bootstrap"
-  filename      = "${path.module}/../../../bin/scanworker.zip"
+  function_name    = "${local.prefix}-scanworker-${var.env}"
+  role             = aws_iam_role.worker.arn
+  architectures    = ["arm64"]
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  filename         = "${path.module}/../../../bin/scanworker.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/scanworker.zip")
-  memory_size   = 512
-  timeout       = 90 # Opus vision worst case + image download + SDK retries
+  memory_size      = 512
+  # Must exceed 2× the vision deadline: scanproc.analyzeWithPlausibilityRetry
+  # calls AnalyzePhoto up to TWICE per invocation, and each Gemini call uses a
+  # ~75s context deadline (pkg/llm/gemini/client.go). Worst case ≈ 2×75s = 150s
+  # plus image download. 90s killed the worker mid-second-call on a slow LLM
+  # (real Gemini 503 "high demand" spike) → SQS redelivery → full re-run (more
+  # LLM spend) → DLQ → FAILED. 170s gives headroom over the 150s worst case.
+  timeout = 170
 
   # The global Claude-call ceiling and cost circuit-breaker.
   reserved_concurrent_executions = var.worker_reserved_concurrency
@@ -71,15 +79,15 @@ resource "aws_lambda_event_source_mapping" "worker_sqs" {
 # DLQ consumer: same binary, DLQ_MODE=1 — marks dead-lettered scans
 # FAILED(internal) + refunds quota so clients aren't polling zombies.
 resource "aws_lambda_function" "dlq_consumer" {
-  function_name = "${local.prefix}-dlqconsumer-${var.env}"
-  role          = aws_iam_role.worker.arn # same scopes: table write + queue consume
-  architectures = ["arm64"]
-  runtime       = "provided.al2023"
-  handler       = "bootstrap"
-  filename      = "${path.module}/../../../bin/scanworker.zip"
+  function_name    = "${local.prefix}-dlqconsumer-${var.env}"
+  role             = aws_iam_role.worker.arn # same scopes: table write + queue consume
+  architectures    = ["arm64"]
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  filename         = "${path.module}/../../../bin/scanworker.zip"
   source_code_hash = filebase64sha256("${path.module}/../../../bin/scanworker.zip")
-  memory_size   = 256
-  timeout       = 30
+  memory_size      = 256
+  timeout          = 30
 
   environment {
     variables = merge(local.common_env, { ROLE = "worker", DLQ_MODE = "1" })
