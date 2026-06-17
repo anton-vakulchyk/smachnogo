@@ -39,20 +39,13 @@ struct RootTabView: View {
     private var fallbackTabView: some View {
         TabView(selection: $selected) {
             DayView(addAction: $addAction)
+                .modifier(ScanAccessoryPill { trigger($0) })
                 .tabItem { Label("Diary", systemImage: "book") }
                 .tag(Tab.diary)
             StatsView()
+                .modifier(ScanAccessoryPill { trigger($0) })
                 .tabItem { Label("Stats", systemImage: "chart.bar") }
                 .tag(Tab.stats)
-        }
-        .safeAreaInset(edge: .bottom) {
-            ScanAccessory { trigger($0) }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 14)
-                .background(.regularMaterial, in: Capsule())
-                .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 4)
         }
     }
 
@@ -60,6 +53,25 @@ struct RootTabView: View {
     private func trigger(_ action: AddMealAction) {
         selected = .diary
         addAction = action
+    }
+}
+
+/// iOS 17–25 fallback: pins the "Scan a meal" pill above the bottom edge of a
+/// tab's CONTENT. Applied to each tab's content (NOT the TabView) — applying a
+/// bottom `safeAreaInset` to the TabView places the pill inside the standard
+/// tab bar's own safe-area region, overlapping and blocking the tabs.
+private struct ScanAccessoryPill: ViewModifier {
+    let onAction: (AddMealAction) -> Void
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom) {
+            ScanAccessory(onAction: onAction)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 4)
+        }
     }
 }
 
