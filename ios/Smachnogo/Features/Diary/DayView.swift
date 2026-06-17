@@ -6,8 +6,9 @@ import AVFoundation
 /// planned meals, tap to edit, scan via camera/library. The empty state IS
 /// the onboarding.
 struct DayView: View {
-    /// Bumped by the floating Scan button (RootTabView) — opens the camera.
-    @Binding var scanRequests: Int
+    /// Set by the bottom-bar accessory (RootTabView) to drive an add flow;
+    /// DayView performs it and clears it back to nil.
+    @Binding var addAction: AddMealAction?
 
     @State private var selectedDate = Date()
     @State private var meals: [Meal] = []
@@ -67,7 +68,15 @@ struct DayView: View {
             // webhook) — un-park photos that were waiting on the paywall.
             if store.isSubscribed { queue.retryPaywalled() }
         }
-        .onChange(of: scanRequests) { _, _ in openCamera() }
+        .onChange(of: addAction) { _, action in
+            guard let action else { return }
+            switch action {
+            case .camera: openCamera()
+            case .library: showLibrary = true
+            case .describe: showManualEntry = true
+            }
+            addAction = nil
+        }
         .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
         .sheet(isPresented: $showPaywall) {
             PaywallView(reason: store.me.flatMap { $0.scansRemaining <= 0 ? "scans_exhausted" : nil })
@@ -141,7 +150,7 @@ struct DayView: View {
                     Image(systemName: "camera")
                     Text(me.scansRemaining > 0
                          ? "\(me.scansRemaining) free scan\(me.scansRemaining == 1 ? "" : "s") left"
-                         : "Free scans used — go unlimited")
+                         : "Free scans used — go Premium")
                     Image(systemName: "chevron.right").font(.caption2)
                 }
                 .font(.footnote.weight(.medium))
