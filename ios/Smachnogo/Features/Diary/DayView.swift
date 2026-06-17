@@ -21,7 +21,6 @@ struct DayView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var activeScan: ActiveScan?
     @State private var editingMeal: Meal?
-    @State private var showSettings = false
     @State private var showManualEntry = false
     @State private var queue = PendingScanQueue.shared
     @State private var store = StoreService.shared
@@ -44,19 +43,15 @@ struct DayView: View {
                 scansRemainingChip
                 content
             }
-            .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { showManualEntry = true } label: { Image(systemName: "square.and.pencil") }
-                        .accessibilityLabel("Describe a meal")
-                    Button { showLibrary = true } label: { Image(systemName: "photo.on.rectangle") }
-                        .accessibilityLabel("Scan from photo library")
-                    // Camera lives on the floating Scan button (RootTabView).
+                    SettingsButton {
+                        Task {
+                            await load()
+                            await store.refreshServerState()
+                        }
+                    }
                 }
             }
         }
@@ -108,14 +103,6 @@ struct DayView: View {
                 Task { await load() }
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(onDataChanged: {
-                Task {
-                    await load()
-                    await store.refreshServerState()
-                }
-            })
-        }
         .alert("Camera access is off", isPresented: $cameraDenied) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -126,10 +113,6 @@ struct DayView: View {
         } message: {
             Text("Enable camera access in Settings, or pick a photo from your library — scanning works either way.")
         }
-    }
-
-    private var navTitle: String {
-        Calendar.current.isDateInToday(selectedDate) ? "Today" : selectedDate.formatted(.dateTime.day().month())
     }
 
     /// Free-tier camera allowance, always visible while it's the scarce
@@ -190,7 +173,6 @@ struct DayView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .contentMargins(.bottom, 88, for: .scrollContent)
             .refreshable { await load() }
         }
     }
