@@ -464,15 +464,12 @@ Replace the whole `emptyState` computed property with:
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            // First-run only: teach the methods inline. Returning users on an
-            // empty day already know the accessory — keep it calm.
+            // First-run only: surface the non-obvious input methods (they
+            // otherwise live behind the accessory's "…"). Scanning itself is
+            // the prominent "Scan a meal" accessory below — no duplicate
+            // primary button here (avoids the very stacked-CTA redundancy
+            // this redesign set out to remove).
             if !isFutureDay && !hasLoggedAnyMeal {
-                Button { openCamera() } label: {
-                    Label("Scan a meal", systemImage: "camera")
-                        .frame(maxWidth: 220)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
                 HStack(spacing: 20) {
                     Button { showManualEntry = true } label: {
                         Label("Describe", systemImage: "square.and.pencil")
@@ -482,6 +479,7 @@ Replace the whole `emptyState` computed property with:
                     }
                 }
                 .font(.subheadline)
+                .padding(.top, 4)
             }
             if let loadError {
                 Text(loadError).font(.footnote).foregroundStyle(.red).padding(.horizontal)
@@ -501,9 +499,9 @@ Replace the whole `emptyState` computed property with:
             return "Planning ahead? Scan or describe a meal and pick this date when saving."
         }
         if hasLoggedAnyMeal {
-            return "Use Scan a meal below to log something for today."
+            return "Tap Scan a meal below to log something for today."
         }
-        return "Point the camera at your plate — calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot."
+        return "Tap Scan a meal below — point the camera at your plate and calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot."
     }
 ```
 
@@ -519,7 +517,7 @@ Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 5: Verify both empty-state variants in the simulator**
 
-- **First run:** fresh install (or reset: `xcrun simctl uninstall booted app.smachnogo.ios` then reinstall). Empty Diary shows **"Add your first meal"** + the value/tip copy + the **Scan / Describe / Choose photo** buttons.
+- **First run:** fresh install (or reset: `xcrun simctl uninstall booted app.smachnogo.ios` then reinstall). Empty Diary shows **"Add your first meal"** + the value/tip copy + the **Describe / Choose photo** buttons (scanning is the prominent "Scan a meal" accessory below — intentionally NOT duplicated as a body button).
 - **Returning, empty day:** log a meal (so `hasLoggedAnyMeal` flips), then navigate to a different empty day with the `CalendarStrip` chevrons. It should read **"Nothing logged yet"** + "Use Scan a meal below…" with **no** teaching buttons.
 
 - [ ] **Step 6: Commit**
