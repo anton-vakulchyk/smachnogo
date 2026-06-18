@@ -10,7 +10,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     concurrency: { group: deploy-dev, cancel-in-progress: false }
     runs-on: ubuntu-latest
-    environment: dev
+    # No `environment:` here on purpose: declaring one makes GitHub mint the OIDC
+    # token with sub=repo:…:environment:dev, which would NOT match the dev role's
+    # trust (sub=repo:…:ref:refs/heads/main). dev has no protection rules anyway.
+    # (apply-prod keeps `environment: prod` — that matches trust_prod and adds the
+    # required-reviewer gate.)
     defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
