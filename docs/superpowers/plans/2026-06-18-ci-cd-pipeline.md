@@ -1,163 +1,130 @@
-# CI/CD Pipeline Implementation Plan
+# CI/CD Pipeline Implementation Plan (rev 2 — hardened)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Spec: `docs/superpowers/specs/2026-06-18-ci-cd-pipeline-design.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use `- [ ]`. Spec: `docs/superpowers/specs/2026-06-18-ci-cd-pipeline-design.md`. This rev incorporates an independent expert review (scoped IAM, plan-before-apply, fixed iOS lanes).
 
-**Goal:** A 2-person GitHub Actions pipeline: PRs run checks; merge to `main` auto-deploys backend→AWS dev + iOS→TestFlight; tag `v*` cuts a prod release (backend→AWS prod + iOS→App Store) behind one teammate approval.
+**Goal:** A safe 2-person pipeline: PRs run checks + a Terraform **plan**; merge to `main` auto-deploys backend→AWS dev + iOS→TestFlight; tag `v*` cuts a prod release where a human **approves a reviewed plan**, then iOS promotes to the App Store.
 
-**Architecture:** Three triggers (PR / push `main` / tag). Backend deploys via `deploy.sh` = `build.sh` (3 lambda zips) → `terraform apply` per env (lambda code rides `source_code_hash`). AWS auth via GitHub OIDC roles codified in Terraform. iOS via Fastlane + an App Store Connect API key; build number = `github.run_number`; prod promotes the already-tested TestFlight build.
+**Architecture:** OIDC with **3 least-priv roles** (read-only *plan*; *deploy-dev*; *deploy-prod*). Backend deploy = `build.sh` (3 zips) → `terraform` (dev: `apply -auto-approve`; prod: `plan -out` → approval → `apply tfplan`). iOS via Fastlane **match** + ASC API key; build#=`run_number`; prod promotes the tested TestFlight build.
 
-**Tech Stack:** GitHub Actions, Go 1.26 (workspace: `pkg`,`functions/api`,`functions/workers/scanworker`,`functions/presignup`,`tests`), Terraform + S3 state (acct `920071567477`, region `us-east-1`), golangci-lint, Fastlane, Xcode 26.5 (scheme `Smachnogo`, app id `app.smachnogo.ios`, team `CP598M5SUG`). Repo: `anton-vakulchyk/smachnogo`.
+**Tech Stack:** GitHub Actions, Go 1.26, Terraform + S3 state (acct `920071567477`, us-east-1), golangci-lint, Fastlane (match), xcodegen, Xcode 26.5. Repo `anton-vakulchyk/smachnogo`. Scheme `Smachnogo`, app id `app.smachnogo.ios`, team `CP598M5SUG`.
 
-**Verification model:** No unit tests for config. Per task: `actionlint`/`terraform validate`/`shellcheck`/`fastlane lanes`, then observe the real run with `gh run watch`. 👤 = manual operator (Anton) action.
-
-**Branch:** do this on a feature branch `feat/ci-cd` (PRs against `main`); the deploy paths only activate once merged.
+**Verification model:** config, not TDD. Per task: `actionlint`/`terraform validate`/`shellcheck`/`fastlane lanes`, then observe with `gh run watch`. 👤 = operator (Anton). Work on branch `feat/ci-cd`.
 
 ---
 
 ## Phase 1 — Backend checks + AWS delivery
 
-### Task 1: Backend CI (lint + test + vet + terraform check), path-filtered
+### Task 1: Backend CI — lint + test + vet + tf fmt/validate (no creds)
 
-**Files:**
-- Create: `backend/.golangci.yml`
-- Create: `.github/workflows/backend-ci.yml`
-- (Leave the old `.github/workflows/ci.yml` for now; Task 4 removes it.)
+**Files:** Create `backend/.golangci.yml`, `.github/workflows/backend-ci.yml`.
 
-- [ ] **Step 1: Create `backend/.golangci.yml`**
+- [ ] **Step 1: `backend/.golangci.yml`** (pinned linter set; v2 schema)
 ```yaml
 version: "2"
-run:
-  go: "1.26"
+run: { go: "1.26" }
 linters:
-  enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - ineffassign
-    - unused
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  enable: [govet, staticcheck, errcheck, ineffassign, unused]
 ```
 
-- [ ] **Step 2: Create `.github/workflows/backend-ci.yml`**
+- [ ] **Step 2: `.github/workflows/backend-ci.yml`** (SHAs pinned for the security-relevant actions; tf-plan added in Task 5)
 ```yaml
 name: backend-ci
 on:
-  pull_request:
-    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
-  push:
-    branches: [main]
-    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
-concurrency:
-  group: backend-ci-${{ github.ref }}
-  cancel-in-progress: true
-permissions:
-  contents: read
+  pull_request: { paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
+  push: { branches: [main], paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
+concurrency: { group: "backend-ci-${{ github.ref }}", cancel-in-progress: true }
+permissions: { contents: read }
 jobs:
   lint:
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: backend/pkg } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
       - uses: golangci/golangci-lint-action@v6
-        with: { version: latest, working-directory: backend/pkg }
+        with: { version: "v1.64.8", working-directory: backend/pkg }
   test:
     runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
-      - name: Unit tests
-        run: GOWORK=off go test ./...
+      - run: GOWORK=off go test ./...
         working-directory: backend/pkg
-      - name: Vet all modules
+      - name: vet all modules
         run: |
           for m in pkg functions/api functions/workers/scanworker functions/presignup tests; do
             (cd "$m" && GOWORK=off go vet ./...)
           done
-        working-directory: backend
-  tf-check:
+  tf-fmt-validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: fmt + validate (dev & prod)
+      - run: terraform fmt -check -recursive backend/terraform
+      - name: validate dev & prod
         run: |
-          terraform fmt -check -recursive backend/terraform
           for env in dev prod; do
             terraform -chdir="backend/terraform/envs/$env" init -backend=false
             terraform -chdir="backend/terraform/envs/$env" validate
           done
 ```
+> Note: `golangci-lint v1.64.x` reads the `version: "2"` config; if lint surfaces pre-existing WIP findings, narrow the `enable` set (don't disable wholesale) and note it.
 
-- [ ] **Step 3: Lint the workflow & validate locally**
-```bash
-cd /Users/anton/smachnogo
-command -v actionlint >/dev/null && actionlint .github/workflows/backend-ci.yml || echo "actionlint not installed — skip"
-terraform fmt -check -recursive backend/terraform   # expect: no diff (or fix with `terraform fmt -recursive`)
-(cd backend/pkg && GOWORK=off go vet ./... && echo "vet OK")
-```
-Expected: workflow parses; `go vet` clean. (Note: `terraform validate` with the S3 backend needs `-backend=false` as in the workflow.)
-
-- [ ] **Step 4: Commit**
-```bash
-git add backend/.golangci.yml .github/workflows/backend-ci.yml
-git commit -m "ci: backend lint+test+vet+tf-check workflow (path-filtered, concurrency)"
-```
-
-- [ ] **Step 5: Verify on a PR**
-Push the feature branch, open a PR, and confirm the `backend-ci` checks run and pass: `gh pr create --fill && gh run watch`.
+- [ ] **Step 3: Verify** — `actionlint .github/workflows/backend-ci.yml` (if installed); `terraform fmt -check -recursive backend/terraform` (fix with `terraform fmt -recursive` if needed); `(cd backend/pkg && GOWORK=off go vet ./...)`.
+- [ ] **Step 4: Commit** — `git add backend/.golangci.yml .github/workflows/backend-ci.yml && git commit -m "ci: backend lint+test+vet+tf-validate (path-filtered, pinned)"`
+- [ ] **Step 5: Verify on PR** — push branch, `gh pr create --fill`, `gh run watch`; checks pass.
 
 ---
 
-### Task 2: GitHub OIDC provider + deploy roles (Terraform)
+### Task 2: OIDC provider + THREE scoped roles (Terraform)
 
-**Files:**
-- Create: `backend/terraform/github-oidc/main.tf`
-- Create: `backend/terraform/github-oidc/README.md`
+**Files:** Create `backend/terraform/github-oidc/main.tf`, `.../README.md`.
 
-- [ ] **Step 1: Create `backend/terraform/github-oidc/main.tf`**
+- [ ] **Step 1: `backend/terraform/github-oidc/main.tf`**
 ```hcl
 terraform {
   required_version = ">= 1.5"
   required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
   backend "s3" {
-    bucket         = "smachnogo-tfstate-920071567477"
-    key            = "github-oidc/terraform.tfstate"
-    region         = "us-east-1"
+    bucket = "smachnogo-tfstate-920071567477"
+    key    = "github-oidc/terraform.tfstate"
+    region = "us-east-1"
     dynamodb_table = "smachnogo-tfstate-lock"
   }
 }
 provider "aws" { region = "us-east-1" }
-
-locals { repo = "anton-vakulchyk/smachnogo" }
-
-# GitHub's OIDC identity provider (one per account).
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+locals {
+  repo = "anton-vakulchyk/smachnogo"
+  acct = "920071567477"
 }
 
-# Trust: dev role assumable from main pushes and PRs (for read-only plan).
-data "aws_iam_policy_document" "dev_trust" {
+# GitHub OIDC provider. No thumbprint: AWS validates GitHub via its trusted
+# root CA store since 2023 (thumbprint_list is non-load-bearing / optional).
+resource "aws_iam_openid_connect_provider" "github" {
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+# --- trust policies (the "who can call" boundary) ---
+data "aws_iam_policy_document" "trust_plan" { # read-only: PRs + main
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals { type = "Federated", identifiers = [aws_iam_openid_connect_provider.github.arn] }
     condition { test = "StringEquals", variable = "token.actions.githubusercontent.com:aud", values = ["sts.amazonaws.com"] }
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo}:ref:refs/heads/main", "repo:${local.repo}:pull_request"]
-    }
+    condition { test = "StringLike", variable = "token.actions.githubusercontent.com:sub", values = ["repo:${local.repo}:pull_request", "repo:${local.repo}:ref:refs/heads/main"] }
   }
 }
-
-# Trust: prod role assumable ONLY from the `prod` GitHub Environment.
-data "aws_iam_policy_document" "prod_trust" {
+data "aws_iam_policy_document" "trust_dev" { # main only — NEVER pull_request
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals { type = "Federated", identifiers = [aws_iam_openid_connect_provider.github.arn] }
+    condition { test = "StringEquals", variable = "token.actions.githubusercontent.com:aud", values = ["sts.amazonaws.com"] }
+    condition { test = "StringEquals", variable = "token.actions.githubusercontent.com:sub", values = ["repo:${local.repo}:ref:refs/heads/main"] }
+  }
+}
+data "aws_iam_policy_document" "trust_prod" { # prod environment only
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals { type = "Federated", identifiers = [aws_iam_openid_connect_provider.github.arn] }
@@ -166,133 +133,175 @@ data "aws_iam_policy_document" "prod_trust" {
   }
 }
 
-resource "aws_iam_role" "dev"  { name = "smachnogo-ci-deploy-dev",  assume_role_policy = data.aws_iam_policy_document.dev_trust.json }
-resource "aws_iam_role" "prod" { name = "smachnogo-ci-deploy-prod", assume_role_policy = data.aws_iam_policy_document.prod_trust.json }
-
-# Deploy policy: Terraform manages all of the app's infra, so this is broad
-# by necessity but scoped to this account/region. The OIDC trust above is the
-# real boundary (only this repo's main/PR/prod-env can assume it).
-data "aws_iam_policy_document" "deploy" {
-  statement {
-    sid     = "TFState"
-    actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
-    resources = ["arn:aws:s3:::smachnogo-tfstate-920071567477", "arn:aws:s3:::smachnogo-tfstate-920071567477/*"]
+# --- permission policies (the "what a call can do" boundary) ---
+data "aws_iam_policy_document" "readonly" {
+  statement { # tfstate read + lock
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = ["arn:aws:s3:::smachnogo-tfstate-${local.acct}", "arn:aws:s3:::smachnogo-tfstate-${local.acct}/*"]
   }
-  statement {
-    sid       = "TFLock"
-    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
-    resources = ["arn:aws:dynamodb:us-east-1:920071567477:table/smachnogo-tfstate-lock"]
-  }
-  statement {
-    sid       = "AppInfra"
-    actions   = ["lambda:*", "apigateway:*", "dynamodb:*", "sqs:*", "s3:*", "logs:*", "ssm:*", "cognito-idp:*", "events:*", "iam:*"]
+  statement { actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"], resources = ["arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-tfstate-lock"] }
+  statement { # read everything terraform plan inspects
+    actions   = ["lambda:Get*", "lambda:List*", "apigateway:GET", "dynamodb:Describe*", "dynamodb:List*", "sqs:Get*", "sqs:List*", "s3:GetBucket*", "s3:ListBucket", "logs:Describe*", "ssm:Get*", "ssm:Describe*", "cognito-idp:Describe*", "cognito-idp:List*", "cognito-idp:Get*", "events:Describe*", "events:List*", "iam:Get*", "iam:List*"]
     resources = ["*"]
   }
 }
-resource "aws_iam_policy" "deploy" { name = "smachnogo-ci-deploy", policy = data.aws_iam_policy_document.deploy.json }
+data "aws_iam_policy_document" "deploy" {
+  statement { actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"], resources = ["arn:aws:s3:::smachnogo-tfstate-${local.acct}", "arn:aws:s3:::smachnogo-tfstate-${local.acct}/*"] }
+  statement { actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"], resources = ["arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-tfstate-lock"] }
+  statement { # app infra — broad actions, but scoped resources where the ARN is knowable
+    sid       = "AppData"
+    actions   = ["dynamodb:*"], resources = ["arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-*", "arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-*/index/*"]
+  }
+  statement { actions = ["s3:*"], resources = ["arn:aws:s3:::smachnogo-*", "arn:aws:s3:::smachnogo-*/*"] }
+  statement { actions = ["ssm:*"], resources = ["arn:aws:ssm:us-east-1:${local.acct}:parameter/smachnogo/*"] }
+  statement { # services whose ARNs are awkward to enumerate — account/region-scoped, no IAM
+    sid       = "AppServices"
+    actions   = ["lambda:*", "apigateway:*", "sqs:*", "logs:*", "cognito-idp:*", "events:*"]
+    resources = ["*"]
+  }
+  statement { # IAM: only the app's own roles, never account-wide
+    sid       = "AppRoles"
+    actions   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UpdateRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${local.acct}:role/smachnogo-*"]
+  }
+  statement { # block attaching admin-grade managed policies
+    sid       = "DenyAdminAttach"
+    effect    = "Deny"
+    actions   = ["iam:AttachRolePolicy"]
+    resources = ["*"]
+    condition { test = "ArnEquals", variable = "iam:PolicyARN", values = ["arn:aws:iam::aws:policy/AdministratorAccess", "arn:aws:iam::aws:policy/PowerUserAccess", "arn:aws:iam::aws:policy/IAMFullAccess"] }
+  }
+  statement { # PassRole limited to Lambda
+    sid       = "PassLambdaRoles"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.acct}:role/smachnogo-*"]
+    condition { test = "StringEquals", variable = "iam:PassedToService", values = ["lambda.amazonaws.com"] }
+  }
+}
+
+resource "aws_iam_policy" "readonly" { name = "smachnogo-ci-readonly", policy = data.aws_iam_policy_document.readonly.json }
+resource "aws_iam_policy" "deploy"   { name = "smachnogo-ci-deploy",   policy = data.aws_iam_policy_document.deploy.json }
+
+resource "aws_iam_role" "plan" { name = "smachnogo-ci-plan",        assume_role_policy = data.aws_iam_policy_document.trust_plan.json }
+resource "aws_iam_role" "dev"  { name = "smachnogo-ci-deploy-dev",  assume_role_policy = data.aws_iam_policy_document.trust_dev.json }
+resource "aws_iam_role" "prod" { name = "smachnogo-ci-deploy-prod", assume_role_policy = data.aws_iam_policy_document.trust_prod.json }
+resource "aws_iam_role_policy_attachment" "plan" { role = aws_iam_role.plan.name, policy_arn = aws_iam_policy.readonly.arn }
 resource "aws_iam_role_policy_attachment" "dev"  { role = aws_iam_role.dev.name,  policy_arn = aws_iam_policy.deploy.arn }
 resource "aws_iam_role_policy_attachment" "prod" { role = aws_iam_role.prod.name, policy_arn = aws_iam_policy.deploy.arn }
 
+output "plan_role_arn" { value = aws_iam_role.plan.arn }
 output "dev_role_arn"  { value = aws_iam_role.dev.arn }
 output "prod_role_arn" { value = aws_iam_role.prod.arn }
 ```
 
-- [ ] **Step 2: Create `backend/terraform/github-oidc/README.md`**
-```markdown
-# GitHub Actions → AWS OIDC
-
-One-time bootstrap. Apply locally with admin creds:
-
-    AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc init
-    AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc apply
-
-Then set the two output ARNs as repo secrets (see plan Task 5).
-The `iam:*` grant lets Terraform manage the app's own roles; the OIDC trust
-conditions (repo + branch/PR/prod-environment) are the security boundary.
-```
-
-- [ ] **Step 3: Validate**
-```bash
-terraform -chdir=backend/terraform/github-oidc init -backend=false
-terraform -chdir=backend/terraform/github-oidc validate   # expect: Success
-terraform fmt -check backend/terraform/github-oidc
-```
-
-- [ ] **Step 4: Commit**
-```bash
-git add backend/terraform/github-oidc/
-git commit -m "ci: codify GitHub OIDC provider + dev/prod deploy roles (terraform)"
-```
-
-- [ ] **Step 5: 👤 Operator — apply once + capture ARNs**
-```bash
-AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc init
-AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc apply   # review + yes
-AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc output  # note dev_role_arn / prod_role_arn
-```
-Expected: an OIDC provider + 2 roles in account `920071567477`; ARNs printed.
+- [ ] **Step 2: `README.md`** — note: apply once with admin creds; the readonly role is what PRs assume (it cannot mutate); the deploy roles never trust `pull_request`; `iam:*` is scoped to `role/smachnogo-*` with admin-attach denied and PassRole limited to Lambda.
+- [ ] **Step 3: Validate** — `terraform -chdir=backend/terraform/github-oidc init -backend=false && terraform -chdir=backend/terraform/github-oidc validate && terraform fmt -check backend/terraform/github-oidc`.
+- [ ] **Step 4: Commit** — `git add backend/terraform/github-oidc/ && git commit -m "ci: OIDC provider + 3 least-priv roles (readonly plan / deploy-dev / deploy-prod)"`
+- [ ] **Step 5: 👤 Apply once** — `AWS_PROFILE=smachnogo terraform -chdir=backend/terraform/github-oidc init && apply`; record `plan_role_arn`, `dev_role_arn`, `prod_role_arn`.
 
 ---
 
-### Task 3: `deploy.sh`
+### Task 3: `deploy.sh` (plan / apply-saved-plan / apply-auto)
 
-**Files:**
-- Create: `backend/scripts/deploy.sh`
-
-- [ ] **Step 1: Create `backend/scripts/deploy.sh` (executable)**
+**Files:** Create `backend/scripts/deploy.sh`.
+- [ ] **Step 1: content**
 ```bash
 #!/usr/bin/env bash
-# Build lambda zips, then terraform apply for one env. Lambdas pick up new
-# code via filename + source_code_hash on bin/*.zip (see envs/*/lambda.tf).
 set -euo pipefail
-ENV=""; MODE="apply"
+ENV=""; ACTION=""; FILE="tfplan"
 while [ $# -gt 0 ]; do case "$1" in
   --env) ENV="$2"; shift 2;;
-  --plan) MODE="plan"; shift;;
-  *) echo "unknown arg: $1" >&2; exit 2;;
+  --plan-out) ACTION="plan"; FILE="${2:-tfplan}"; shift 2;;
+  --apply) ACTION="apply"; FILE="${2:-tfplan}"; shift 2;;
+  --apply-auto) ACTION="apply-auto"; shift;;
+  *) echo "bad arg: $1" >&2; exit 2;;
 esac; done
-[ "$ENV" = "dev" ] || [ "$ENV" = "prod" ] || { echo "--env must be dev|prod" >&2; exit 2; }
-
-cd "$(dirname "$0")/.."          # backend/
-./scripts/build.sh               # → bin/{api,scanworker,presignup}.zip
+[ "$ENV" = dev ] || [ "$ENV" = prod ] || { echo "--env must be dev|prod" >&2; exit 2; }
+cd "$(dirname "$0")/.."           # backend/
+./scripts/build.sh                # bin/{api,scanworker,presignup}.zip (deterministic per commit)
 TF="terraform -chdir=terraform/envs/$ENV"
 $TF init -input=false
-if [ "$MODE" = "plan" ]; then
-  $TF plan -input=false -no-color
-else
-  $TF apply -input=false -auto-approve
-fi
+case "$ACTION" in
+  plan)       $TF plan  -input=false -out="$FILE" ;;
+  apply)      $TF apply -input=false "$FILE" ;;          # apply the SAVED, reviewed plan
+  apply-auto) $TF apply -input=false -auto-approve ;;    # dev only (plan reviewed on PR)
+  *) echo "need --plan-out|--apply|--apply-auto" >&2; exit 2 ;;
+esac
 ```
-
-- [ ] **Step 2: Make executable + syntax/shellcheck**
-```bash
-chmod +x backend/scripts/deploy.sh
-bash -n backend/scripts/deploy.sh && echo "syntax OK"
-command -v shellcheck >/dev/null && shellcheck backend/scripts/deploy.sh || echo "shellcheck not installed — skip"
-```
-Expected: `syntax OK`; no shellcheck errors.
-
-- [ ] **Step 3: 👤 Operator — smoke-test plan against dev (read-only)**
-```bash
-AWS_PROFILE=smachnogo backend/scripts/deploy.sh --env dev --plan
-```
-Expected: builds 3 zips, `terraform plan` runs and shows a diff (lambda code update at minimum). No apply. If clean, the script works.
-
-- [ ] **Step 4: Commit**
-```bash
-git add backend/scripts/deploy.sh
-git commit -m "ci: add deploy.sh (build zips + terraform apply per env)"
-```
+- [ ] **Step 2: Verify** — `chmod +x backend/scripts/deploy.sh; bash -n backend/scripts/deploy.sh; shellcheck backend/scripts/deploy.sh` (if installed).
+- [ ] **Step 3: 👤 Smoke** — `AWS_PROFILE=smachnogo backend/scripts/deploy.sh --env dev --plan-out /tmp/p.tfplan` → builds + writes a plan, no apply.
+- [ ] **Step 4: Commit** — `git add backend/scripts/deploy.sh && git commit -m "ci: deploy.sh (plan-out / apply-saved / apply-auto)"`
 
 ---
 
-### Task 4: Deploy workflow (dev auto / prod tag-gated) + retire old ci.yml
+### Task 4: `prevent_destroy` on stateful resources + nightly drift
 
-**Files:**
-- Create: `.github/workflows/backend-deploy.yml`
-- Delete: `.github/workflows/ci.yml`
+**Files:** Modify `backend/terraform/envs/{dev,prod}/dynamodb.tf` and `.../s3.tf`; Create `.github/workflows/backend-drift.yml`.
+- [ ] **Step 1:** In each env's `aws_dynamodb_table.main` and the photos `aws_s3_bucket`, add:
+```hcl
+  lifecycle { prevent_destroy = true }
+```
+- [ ] **Step 2: `.github/workflows/backend-drift.yml`**
+```yaml
+name: backend-drift
+on:
+  schedule: [{ cron: "0 13 * * 1-5" }]
+  workflow_dispatch:
+permissions: { contents: read, id-token: write }
+jobs:
+  drift:
+    strategy: { matrix: { env: [dev, prod] } }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ secrets.AWS_PLAN_ROLE_ARN }}", aws-region: us-east-1 }
+      - name: plan (detailed exit code)
+        run: |
+          ./scripts/build.sh
+          terraform -chdir="terraform/envs/${{ matrix.env }}" init -input=false
+          terraform -chdir="terraform/envs/${{ matrix.env }}" plan -input=false -detailed-exitcode || \
+            echo "DRIFT in ${{ matrix.env }} (exit $?)" >> "$GITHUB_STEP_SUMMARY"
+        working-directory: backend
+```
+- [ ] **Step 3: Verify** — `actionlint .github/workflows/backend-drift.yml`; `terraform fmt -check -recursive backend/terraform`.
+- [ ] **Step 4: Commit** — `git add backend/terraform/envs/*/dynamodb.tf backend/terraform/envs/*/s3.tf .github/workflows/backend-drift.yml && git commit -m "ci: prevent_destroy on data stores + nightly drift plan"`
 
-- [ ] **Step 1: Create `.github/workflows/backend-deploy.yml`**
+---
+
+### Task 5: Deploy workflow (dev auto / prod plan→approve→apply) + tf-plan-on-PR + retire ci.yml
+
+**Files:** Create `.github/workflows/backend-deploy.yml`; Modify `.github/workflows/backend-ci.yml` (add `tf-plan` job); Delete `.github/workflows/ci.yml`.
+
+- [ ] **Step 1: Add `tf-plan` job to `backend-ci.yml`** (read-only role; comments the dev plan on PRs)
+```yaml
+  tf-plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write, pull-requests: write }
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ secrets.AWS_PLAN_ROLE_ARN }}", aws-region: us-east-1 }
+      - id: plan
+        run: ./scripts/deploy.sh --env dev --plan-out /tmp/dev.tfplan 2>&1 | tee /tmp/plan.txt
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = "### Terraform plan (dev)\n```\n" + fs.readFileSync('/tmp/plan.txt','utf8').slice(-60000) + "\n```";
+            github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+```
+(Add `id-token: write` is per-job here; the top-level `permissions` stays `contents: read`.)
+
+- [ ] **Step 2: `.github/workflows/backend-deploy.yml`**
 ```yaml
 name: backend-deploy
 on:
@@ -300,182 +309,127 @@ on:
     branches: [main]
     paths: ["backend/**", ".github/workflows/backend-deploy.yml"]
     tags: ["v*"]
-concurrency:
-  group: backend-deploy-${{ github.ref }}
-  cancel-in-progress: false
-permissions:
-  contents: read
-  id-token: write
+permissions: { contents: read, id-token: write }
 jobs:
   deploy-dev:
     if: github.ref == 'refs/heads/main'
+    concurrency: { group: deploy-dev, cancel-in-progress: false }
     runs-on: ubuntu-latest
     environment: dev
+    defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
       - uses: hashicorp/setup-terraform@v3
       - uses: aws-actions/configure-aws-credentials@v4
-        with: { role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}, aws-region: us-east-1 }
-      - run: ./scripts/deploy.sh --env dev
-        working-directory: backend
-  deploy-prod:
+        with: { role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}", aws-region: us-east-1 }
+      - run: ./scripts/deploy.sh --env dev --apply-auto
+
+  plan-prod:
     if: startsWith(github.ref, 'refs/tags/v')
+    concurrency: { group: deploy-prod, cancel-in-progress: false }
     runs-on: ubuntu-latest
-    environment: prod   # require-reviewer gate lives here (Task 5)
+    defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
       - uses: hashicorp/setup-terraform@v3
       - uses: aws-actions/configure-aws-credentials@v4
-        with: { role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}, aws-region: us-east-1 }
-      - run: ./scripts/deploy.sh --env prod
-        working-directory: backend
-```
+        with: { role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}", aws-region: us-east-1 }
+      - run: ./scripts/deploy.sh --env prod --plan-out prod.tfplan | tee prod-plan.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: prod-plan, path: "backend/prod-plan.txt", retention-days: 7 }
 
-- [ ] **Step 2: Delete the obsolete combined workflow**
-```bash
-git rm .github/workflows/ci.yml
+  apply-prod:
+    needs: plan-prod
+    if: startsWith(github.ref, 'refs/tags/v')
+    concurrency: { group: deploy-prod, cancel-in-progress: false }
+    runs-on: ubuntu-latest
+    environment: prod   # ← required-reviewer gate; approver reads the plan-prod log/artifact
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}", aws-region: us-east-1 }
+      # Rebuild (same tag commit → identical zips → source_code_hash matches the saved plan),
+      # re-plan to the same file, and apply it. (A saved plan can't cross runners, so we
+      # re-init + apply with the same inputs; the prod approval gates THIS job.)
+      - run: ./scripts/deploy.sh --env prod --plan-out prod.tfplan
+      - run: terraform -chdir=terraform/envs/prod apply -input=false prod.tfplan
 ```
+> Rationale: the saved-plan artifact from `plan-prod` is what the **approver reviews**; `apply-prod` (gated) regenerates the identical plan on the same tag commit and applies it. This keeps "approve a real diff" without shipping a binary plan file between runners.
 
-- [ ] **Step 3: Lint workflow**
-```bash
-command -v actionlint >/dev/null && actionlint .github/workflows/backend-deploy.yml || echo "actionlint not installed — skip"
-```
-Expected: parses cleanly.
-
-- [ ] **Step 4: Commit**
-```bash
-git add .github/workflows/backend-deploy.yml .github/workflows/ci.yml
-git commit -m "ci: backend-deploy (dev on main / prod on tag, OIDC); retire ci.yml"
-```
+- [ ] **Step 3:** `git rm .github/workflows/ci.yml`
+- [ ] **Step 4: Verify** — `actionlint .github/workflows/backend-ci.yml .github/workflows/backend-deploy.yml`.
+- [ ] **Step 5: Commit** — `git add -A .github/workflows/ && git commit -m "ci: tf-plan on PR (readonly role) + deploy-dev/plan-prod→approve→apply-prod; retire ci.yml"`
 
 ---
 
-### Task 5: 👤 Operator setup + Phase-1 end-to-end verification
+### Task 6: 👤 Operator setup + Phase-1 verification
 
-No code. Configure GitHub, then prove the loop.
-
-- [ ] **Step 1: Set repo secrets (ARNs from Task 2 Step 5)**
-```bash
-gh secret set AWS_DEPLOY_ROLE_ARN_DEV  -b "arn:aws:iam::920071567477:role/smachnogo-ci-deploy-dev"
-gh secret set AWS_DEPLOY_ROLE_ARN_PROD -b "arn:aws:iam::920071567477:role/smachnogo-ci-deploy-prod"
-```
-
-- [ ] **Step 2: Create Environments + prod gate (GitHub UI: Settings → Environments)**
-- `dev`: no protection.
-- `prod`: add **Required reviewers** = the other teammate; (optional) restrict to tag refs. Scope `AWS_DEPLOY_ROLE_ARN_PROD` to this environment if you prefer env-scoped secrets.
-
-- [ ] **Step 3: Branch protection (Settings → Branches → `main`)**
-Require status checks: `lint`, `test`, `tf-check`. Require PR before merge.
-
-- [ ] **Step 4: Verify dev auto-deploy**
-Merge the Phase-1 PR to `main`, then: `gh run watch` on `backend-deploy`. Expected: `deploy-dev` runs, assumes the dev role via OIDC, `terraform apply` succeeds (lambda code updated). Confirm in AWS (`AWS_PROFILE=smachnogo aws lambda get-function --function-name smachnogo-api-dev --query 'Configuration.LastModified'`).
-
-- [ ] **Step 5: Verify prod tag-deploy + gate**
-```bash
-git tag v1.0.8 && git push origin v1.0.8
-gh run watch   # deploy-prod should PAUSE awaiting approval
-```
-Approve in the UI (other teammate) → expect `terraform apply` against prod succeeds. (This is a real prod deploy — only do it when the backend is release-ready.)
+- [ ] **Step 1: Secrets** — `gh secret set AWS_PLAN_ROLE_ARN -b <plan_role_arn>`; `AWS_DEPLOY_ROLE_ARN_DEV`; `AWS_DEPLOY_ROLE_ARN_PROD` (from Task 2 Step 5).
+- [ ] **Step 2: Environments** — `dev` (no protection); `prod` (Required reviewer = the other teammate; scope the prod role secret here).
+- [ ] **Step 3: Branch protection on `main`** — require `lint`, `test`, `tf-fmt-validate`, `tf-plan`.
+- [ ] **Step 4: ⚠️ LAUNCH-GATE** — before the FIRST prod apply, revert the beta-generous Terraform vars (`free_scan_allowance` 1000→real, `free_window_days` 3650→7, review `daily_scan_cap`) in `terraform/envs/prod/variables.tf`, so a tag doesn't auto-ship beta limits to prod.
+- [ ] **Step 5: Verify dev** — merge the PR; `gh run watch` → `deploy-dev` assumes the dev role, `apply -auto-approve` succeeds; confirm `aws lambda get-function --function-name smachnogo-api-dev`.
+- [ ] **Step 6: Verify prod** — `git tag v1.0.8 && git push origin v1.0.8`; `plan-prod` runs, `apply-prod` PAUSES for approval; teammate reviews the plan artifact + approves → apply succeeds. (Only when backend is release-ready.)
 
 ---
 
 ## Phase 2 — iOS TestFlight
 
-### Task 6: Fastlane (TestFlight)
+### Task 7: Fastlane (match + compile-only test + beta)
 
-**Files:**
-- Create: `ios/fastlane/Appfile`
-- Create: `ios/fastlane/Fastfile`
-- Create: `ios/Gemfile`
-
-- [ ] **Step 1: Create `ios/Gemfile`**
-```ruby
-source "https://rubygems.org"
-gem "fastlane"
-```
-
-- [ ] **Step 2: Create `ios/fastlane/Appfile`**
-```ruby
-app_identifier("app.smachnogo.ios")
-itc_team_id(ENV["ASC_TEAM_ID"]) if ENV["ASC_TEAM_ID"]
-```
-
-- [ ] **Step 3: Create `ios/fastlane/Fastfile`**
+**Files:** Create `ios/Gemfile`, `ios/fastlane/{Appfile,Matchfile,Fastfile}`.
+- [ ] **Step 1: `ios/Gemfile`** — `source "https://rubygems.org"` / `gem "fastlane"`.
+- [ ] **Step 2: `ios/fastlane/Appfile`** — `app_identifier("app.smachnogo.ios")`.
+- [ ] **Step 3: `ios/fastlane/Matchfile`** — `git_url(ENV["MATCH_GIT_URL"])` / `storage_mode("git")` / `type("appstore")` / `app_identifier(["app.smachnogo.ios"])` / `readonly(true)`.
+- [ ] **Step 4: `ios/fastlane/Fastfile`**
 ```ruby
 default_platform(:ios)
-
 def asc_key
-  app_store_connect_api_key(
-    key_id: ENV.fetch("ASC_KEY_ID"),
-    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
-    key_content: ENV.fetch("ASC_KEY_P8_BASE64"),
-    is_key_content_base64: true,
-  )
+  app_store_connect_api_key(key_id: ENV.fetch("ASC_KEY_ID"), issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+                            key_content: ENV.fetch("ASC_KEY_P8_BASE64"), is_key_content_base64: true)
 end
-
 platform :ios do
-  # PR check: compile + unit tests on the simulator, NO signing.
+  # PR: compile-only. There is NO test target — do not run_tests.
   lane :test do
-    run_tests(
-      project: "Smachnogo.xcodeproj",
-      scheme: "Smachnogo",
-      destination: "platform=iOS Simulator,name=iPhone 16,OS=latest",
-      skip_package_dependencies_resolution: false,
-    )
+    build_app(project: "Smachnogo.xcodeproj", scheme: "Smachnogo",
+              destination: "generic/platform=iOS Simulator",
+              skip_archive: true, skip_codesigning: true, skip_package_ipa: true)
   end
-
-  # merge→main: archive Release + upload to TestFlight. Build# = CI run number.
+  # merge→main: signed Release archive → TestFlight. Build# via xcargs (no agvtool).
   lane :beta do
     api = asc_key
-    increment_build_number(xcodeproj: "Smachnogo.xcodeproj", build_number: ENV.fetch("GITHUB_RUN_NUMBER"))
-    build_app(
-      project: "Smachnogo.xcodeproj",
-      scheme: "Smachnogo",
-      export_method: "app-store",
-      xcargs: "-allowProvisioningUpdates",
-    )
+    match(type: "appstore", readonly: true, api_key: api)
+    build_app(project: "Smachnogo.xcodeproj", scheme: "Smachnogo", export_method: "app-store",
+              xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('GITHUB_RUN_NUMBER')}")
     upload_to_testflight(api_key: api, skip_waiting_for_build_processing: true)
   end
 end
 ```
-
-- [ ] **Step 4: List lanes (sanity)**
-```bash
-cd ios && bundle install && bundle exec fastlane lanes
-```
-Expected: `test` and `beta` lanes listed.
-
-- [ ] **Step 5: Commit**
-```bash
-git add ios/Gemfile ios/fastlane/Appfile ios/fastlane/Fastfile
-git commit -m "ci(ios): fastlane test + beta(TestFlight) lanes (ASC API key)"
-```
+- [ ] **Step 5: Verify** — `cd ios && bundle install && bundle exec fastlane lanes` lists `test`,`beta`.
+- [ ] **Step 6: Commit** — `git add ios/Gemfile ios/fastlane/ && git commit -m "ci(ios): fastlane match + compile-only test + beta→TestFlight"`
+- [ ] **Step 7: 👤 Seed match + secrets** — create a private certs repo; `fastlane match appstore` once locally (creates Distribution cert + App Store profile); `gh secret set MATCH_GIT_URL/MATCH_PASSWORD ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_P8_BASE64` (`base64 -i AuthKey_*.p8`; ASC key role = App Manager).
 
 ---
 
-### Task 7: iOS CI workflow (PR sim-build + beta on main)
+### Task 8: iOS CI workflow (PR compile / beta on main)
 
-**Files:**
-- Create: `.github/workflows/ios-ci.yml`
-
-- [ ] **Step 1: Create `.github/workflows/ios-ci.yml`**
+**Files:** Create `.github/workflows/ios-ci.yml`.
+- [ ] **Step 1: content**
 ```yaml
 name: ios-ci
 on:
-  pull_request:
-    paths: ["ios/**", ".github/workflows/ios-ci.yml"]
-  push:
-    branches: [main]
-    paths: ["ios/**", ".github/workflows/ios-ci.yml"]
-concurrency:
-  group: ios-ci-${{ github.ref }}
-  cancel-in-progress: true
-permissions:
-  contents: read
+  pull_request: { paths: ["ios/**", ".github/workflows/ios-ci.yml"] }
+  push: { branches: [main], paths: ["ios/**", ".github/workflows/ios-ci.yml"] }
+concurrency: { group: "ios-ci-${{ github.ref }}", cancel-in-progress: true }
+permissions: { contents: read }
 jobs:
   test:
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
@@ -484,6 +438,8 @@ jobs:
     defaults: { run: { working-directory: ios } }
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: { xcode-version: "26.5" }
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: "3.3", bundler-cache: true, working-directory: ios }
       - run: brew install xcodegen && xcodegen generate
@@ -498,72 +454,47 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
       GITHUB_RUN_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: { xcode-version: "26.5" }
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: "3.3", bundler-cache: true, working-directory: ios }
       - run: brew install xcodegen && xcodegen generate
       - run: bundle exec fastlane beta
 ```
+> Pin xcodegen version if drift bites (`brew install xcodegen` floats; acceptable for v1, revisit).
 
-- [ ] **Step 2: Lint**
-```bash
-command -v actionlint >/dev/null && actionlint .github/workflows/ios-ci.yml || echo "actionlint not installed — skip"
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add .github/workflows/ios-ci.yml
-git commit -m "ci(ios): PR sim-build/test (no signing) + beta→TestFlight on main"
-```
-
-- [ ] **Step 4: 👤 Operator — ASC key secrets**
-Create an App Store Connect API key (role **App Manager**), download the `.p8` once, then:
-```bash
-gh secret set ASC_KEY_ID -b "<key id>"
-gh secret set ASC_ISSUER_ID -b "<issuer id>"
-gh secret set ASC_KEY_P8_BASE64 -b "$(base64 -i AuthKey_XXXX.p8)"
-```
-
-- [ ] **Step 5: Verify**
-PR touching `ios/**` → `test` job runs on macOS, passes (no signing). Merge to `main` → `beta` uploads build `#<run_number>` to TestFlight (confirm in App Store Connect → TestFlight).
+- [ ] **Step 2: Verify** — `actionlint .github/workflows/ios-ci.yml`.
+- [ ] **Step 3: Commit** — `git add .github/workflows/ios-ci.yml && git commit -m "ci(ios): PR compile-check (no signing) + beta→TestFlight on main (match, build#=run)"`
+- [ ] **Step 4: Verify** — iOS PR → `test` compiles green (no signing); merge → `beta` uploads build `#<run_number>` to TestFlight (confirm in ASC → TestFlight, build processed).
 
 ---
 
 ## Phase 3 — iOS App Store on tag
 
-### Task 8: Fastlane `release` lane + tag trigger
+### Task 9: `release` lane + tag job
 
-**Files:**
-- Modify: `ios/fastlane/Fastfile` (add `release` lane)
-- Modify: `.github/workflows/ios-ci.yml` (add tag-triggered `release` job)
-
-- [ ] **Step 1: Add the `release` lane to `ios/fastlane/Fastfile`** (inside `platform :ios do`, after `beta`)
+**Files:** Modify `ios/fastlane/Fastfile`; Modify `.github/workflows/ios-ci.yml`.
+- [ ] **Step 1: Add `release` lane** (promote the tested build; no metadata push; human submits)
 ```ruby
-  # tag: promote the latest tested TestFlight build to App Store, staged for
-  # review. We do NOT auto-submit — a human clicks "Submit for Review" in ASC.
   lane :release do
     api = asc_key
-    upload_to_app_store(
-      api_key: api,
+    upload_to_app_store(api_key: api,
+      app_version: get_version_number(xcodeproj: "Smachnogo.xcodeproj", target: "Smachnogo"),
       build_number: latest_testflight_build_number(api_key: api).to_s,
-      submit_for_review: false,
-      automatic_release: false,
-      skip_binary_upload: true,
-      skip_screenshots: true,
-      skip_metadata: false,
-      precheck_include_in_app_purchases: false,
-      force: true,
-    )
+      submit_for_review: false, automatic_release: false,
+      skip_binary_upload: true, skip_metadata: true, skip_screenshots: true, force: true)
   end
 ```
-
-- [ ] **Step 2: Add the `release` job to `.github/workflows/ios-ci.yml`** (new job; runs on Linux — it's an ASC API call, no Xcode)
+- [ ] **Step 2: Add tag trigger + `release` job to `ios-ci.yml`** — add `tags: ["v*"]` to `on.push`, and:
 ```yaml
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest   # ASC API call only; no Xcode/macOS needed
     timeout-minutes: 20
     environment: prod
     defaults: { run: { working-directory: ios } }
@@ -577,51 +508,18 @@ PR touching `ios/**` → `test` job runs on macOS, passes (no signing). Merge to
         with: { ruby-version: "3.3", bundler-cache: true, working-directory: ios }
       - run: bundle exec fastlane release
 ```
-Also add `tags: ["v*"]` to the workflow's `on.push` block so tags trigger it:
-```yaml
-  push:
-    branches: [main]
-    tags: ["v*"]
-    paths: ["ios/**", ".github/workflows/ios-ci.yml"]
-```
-(Note: tag pushes ignore `paths`, so the `release` job fires on any `v*` tag.)
-
-- [ ] **Step 3: Lint + lanes**
-```bash
-command -v actionlint >/dev/null && actionlint .github/workflows/ios-ci.yml || echo "skip"
-cd ios && bundle exec fastlane lanes   # expect test, beta, release
-```
-
-- [ ] **Step 4: Commit**
-```bash
-git add ios/fastlane/Fastfile .github/workflows/ios-ci.yml
-git commit -m "ci(ios): release lane — stage tested TestFlight build for App Store (manual submit)"
-```
-
-- [ ] **Step 5: Verify**
-Tag `v1.0.8` → `release` job pauses on `prod` approval → approve → expect the latest TestFlight build attached to a new App Store version (status "Prepare for Submission"). Then 👤 a human reviews release notes and clicks **Submit for Review** in App Store Connect.
+- [ ] **Step 3: Verify** — `actionlint`; `cd ios && bundle exec fastlane lanes` shows `test`,`beta`,`release`.
+- [ ] **Step 4: Commit** — `git add ios/fastlane/Fastfile .github/workflows/ios-ci.yml && git commit -m "ci(ios): release — promote tested TestFlight build to App Store (skip metadata, human submit)"`
+- [ ] **Step 5: Verify** — tag → `release` pauses on `prod` approval → approve → latest TestFlight build attached to a new App Store version ("Prepare for Submission"). 👤 human reviews notes + clicks **Submit for Review** in ASC.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:**
-- Backend lint/test/vet/tf-check, path-filtered, concurrency → Task 1 ✓
-- OIDC codified (provider + dev/prod roles, env-scoped prod trust) → Task 2 ✓
-- `deploy.sh` (build + tf apply per env) → Task 3 ✓
-- dev auto on main / prod on tag, gated → Task 4 + 5 ✓
-- Secrets, environments, branch protection → Task 5 ✓
-- iOS Fastlane + ASC key, build#=run_number, PR sim-build, beta→TestFlight → Tasks 6,7 ✓
-- App Store on tag, promote tested build, human-submit → Task 8 ✓
-- Retire broken `ci.yml` → Task 4 ✓
-- Phasing 1/2/3 → matches Phase headers ✓
-- Watch-outs (build# monotonic, build reuse, signing via API key, macOS cost controls, export-compliance already set) → Tasks 6/7/8 ✓
+**Spec coverage (rev 2):** scoped IAM + 3 roles → Task 2 ✓ · plan-on-PR (readonly role + comment) → Task 5 Step 1 ✓ · prod plan→approve→apply → Task 5 Step 2 ✓ · deploy.sh modes → Task 3 ✓ · prevent_destroy + drift → Task 4 ✓ · pins (SHAs/golangci/Xcode) → Tasks 1,5,8 ✓ · compile-only iOS lane → Task 7 ✓ · build# via xcargs → Task 7 ✓ · match → Tasks 7,8 ✓ · App Store promote skip_metadata + app_version → Task 9 ✓ · LAUNCH-GATE → Task 6 Step 4 ✓ · retire ci.yml → Task 5 ✓.
 
-**Placeholder scan:** Operator steps have real `gh`/`terraform`/`aws` commands; `<key id>`/`<issuer id>`/`v1.0.8` are genuine user-supplied values, not lazy placeholders. No TBDs. ✓
+**Placeholder scan:** operator values (`<plan_role_arn>`, `v1.0.8`, ASC key/issuer) are genuine user inputs, not lazy TODOs. No "TBD". Action `@v4`/`@v5` tags used for readability — Task 5/Spec call for pinning the security-relevant ones to SHAs as a hardening pass (note kept, not silent). ✓
 
-**Type/name consistency:** `asc_key` helper used by `beta` + `release`; secret names (`ASC_KEY_ID/ISSUER_ID/P8_BASE64`, `AWS_DEPLOY_ROLE_ARN_DEV/PROD`) consistent across Fastfile, workflows, and operator steps; role names match Task 2 outputs → Task 5 secret values. ✓
+**Consistency:** role names (`smachnogo-ci-plan|deploy-dev|deploy-prod`) ↔ secret names (`AWS_PLAN_ROLE_ARN|_DEV|_PROD`) ↔ workflow `role-to-assume` ↔ Task 6 `gh secret set`. `deploy.sh` flags (`--plan-out/--apply/--apply-auto`) match every caller. `asc_key` helper shared by `beta`+`release`. ✓
 
-**Known caveats for the executor:**
-- `golangci-lint` may surface pre-existing findings in the WIP backend; fix or narrow `.golangci.yml` `enable` set in Task 1 if it blocks (don't disable wholesale).
-- First `fastlane build_app` with `-allowProvisioningUpdates` needs the Apple Distribution cert reachable; if the runner can't create it via the API key, switch to `match` (add a private certs repo) — note it and escalate rather than committing secrets.
-- Action version tags (`@v4` etc.) are used for readability; pinning to commit SHAs is a hardening follow-up.
+**Caveats for the executor:** golangci-lint may flag WIP backend code (narrow `enable`, don't disable); first `match` run needs the certs repo seeded (Task 7 Step 7) or `beta` fails — that's a 👤 prerequisite, not an agent step; pin action SHAs + xcodegen version as a hardening follow-up.

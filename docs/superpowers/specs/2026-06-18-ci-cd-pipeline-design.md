@@ -1,95 +1,95 @@
 # CI/CD Pipeline Design — Smachnogo monorepo
 
-**Date:** 2026-06-18
-**Status:** Approved design → implementation plan to follow
+**Date:** 2026-06-18 (rev 2 — hardened after independent expert review)
+**Status:** Approved design → implementation plan
 **Topic:** GitHub Actions CI/CD for a 2-person team: backend checks + AWS delivery (dev auto / prod gated) + iOS TestFlight/App Store.
 
 ## Goal
 
-Replace the current half-built `ci.yml` with a proper, low-ceremony pipeline so a 2-person team can ship without running the backend locally: every change is checked on PR, `main` continuously deploys to **dev** (AWS backend + iOS TestFlight), and a git **tag** cuts a **prod** release (AWS backend + App Store) behind one teammate approval.
+Replace the half-built `ci.yml` with a proper, low-ceremony, **safe** pipeline so a 2-person team can ship without running the backend locally: PRs run checks **and a Terraform plan**, `main` continuously deploys to **dev** (AWS + iOS TestFlight), and a git **tag** cuts a **prod** release (AWS + App Store) where the human **approves a reviewed plan**, not an unseen apply.
 
 ## Current State & Gaps
 
-- `ci.yml`: `test` (`go test ./...` in `pkg`, `go vet` across 5 modules) → `build` (`scripts/build.sh` → `bin/{api,scanworker,presignup}.zip` artifact). A `deploy` job exists but is **broken**: it calls `scripts/deploy.sh`, which **does not exist**, and **OIDC is not wired** (no IAM provider/role, no `AWS_DEPLOY_ROLE_ARN`).
-- No `golangci-lint`, no Terraform `fmt/validate/plan` in CI, no path filters, no concurrency control, no pinned action SHAs.
-- iOS has **no** CI; TestFlight is manual Xcode archiving (builds 3–7).
-- Terraform: per-env duplicated `.tf` under `terraform/envs/{dev,prod}`, **S3 remote state** (`smachnogo-tfstate-920071567477`, lock table `smachnogo-tfstate-lock`), single AWS account `920071567477`. Lambdas deploy via `filename = bin/<fn>.zip` + `source_code_hash` — so **`terraform apply` IS the code+infra deploy**.
+- `ci.yml`: `test`+`vet` → `build` (3 lambda zips). `deploy` job is **broken** (`scripts/deploy.sh` absent; OIDC not wired). No lint, no Terraform plan, no path filters, no concurrency, no iOS CI.
+- Terraform: per-env `.tf` under `envs/{dev,prod}`, **S3 state** (`smachnogo-tfstate-920071567477`, lock `smachnogo-tfstate-lock`), single account `920071567477`. Lambdas deploy via `filename = bin/<fn>.zip` + `source_code_hash`, so **`terraform apply` IS the code+infra deploy**. Terraform manages 3 per-Lambda IAM roles (needs `iam:PassRole`).
+- iOS: **no test target exists** (scheme `<Testables>` is empty); `VERSIONING_SYSTEM` is unset; built via **xcodegen** (`project.yml` is source of truth).
 
-## Decisions (resolved) & Rationale
+## Decisions (post-review) & Rationale
 
-| Decision | Choice | Why (2-person team) |
+| Decision | Choice | Why |
 |---|---|---|
-| Branch model | Trunk + tags | Minimal ceremony; PR checks are the safety net. |
-| Dev deploy | **Auto on merge to `main`** (backend `tf apply` + iOS→TestFlight) | "No local backend" — dev AWS always reflects `main`; latest app always in TestFlight to dogfood. |
-| Prod deploy | **Git tag `vX.Y.Z`**, behind a GitHub `prod` Environment approval (the other teammate) | One tag = one coordinated backend+app release; the approval is the release review. |
-| App Store step | **Upload/promote build; human clicks "Submit for Review"** in ASC | Apple's 24–48h review gates anyway; keep a human on the irreversible, judgment step (notes/timing/phasing). No 2am auto-submit with no on-call. |
-| iOS on PRs | **Keep, but cheap**: path-filtered to `ios/**` + simulator-only, no-signing build/test | Merge auto-ships to TestFlight, so a broken iOS merge costs more than the bounded macOS minutes. Pure-backend PRs pay nothing. |
-| AWS auth | **OIDC, codified in Terraform** (provider + least-priv dev/prod roles) | No static keys; reproducible; reviewable. |
-| iOS signing/upload | **Fastlane + App Store Connect API key (.p8)** | Small-team standard; reproducible signing on ephemeral runners; same key for TestFlight + App Store. |
-| AWS isolation | **Same account, per-env TF state** (existing) | Multi-account is overkill for 2 people. |
-| Build-number source | **CI run number** (monotonic), not git state | Auto-uploading to TestFlight on every merge requires strictly-increasing build numbers. |
-| Build reuse | **Promote the same TestFlight build to App Store** (no re-archive at tag) | Ship exactly what was tested; tag's iOS step is an ASC API call (runs on Linux), halving macOS minutes. |
+| Branch model | Trunk + tags | Minimal ceremony; PR checks + plan are the safety net. |
+| Dev deploy | Auto on merge to `main` (backend `apply -auto-approve` + iOS→TestFlight) | "No local backend"; dev's plan was already reviewed on the PR. |
+| Prod deploy | Tag `vX.Y.Z` → **plan job → `prod` Environment approval → apply the *saved* plan** | The approval reviews a **real diff**, and apply == exactly what was approved. |
+| AWS auth | **OIDC, 3 roles**: read-only **plan** (trusts `main` + `pull_request`), **deploy-dev** (trusts `main` only), **deploy-prod** (trusts `environment:prod` only) | A `pull_request`-assumable role must be **read-only**; write/IAM roles never trust PRs. |
+| IAM scope | **Least-privilege**: app actions scoped to `smachnogo-*` / app ARNs; `iam:*`→ scoped role-CRUD on `role/smachnogo-*` + `iam:PassRole` limited to `lambda.amazonaws.com` + block attaching `AdministratorAccess` | A `iam:*`-on-`*` deploy role = account-takeover on any compromised step. Trust limits *who calls*; the policy must limit *what a call can do*. |
+| iOS PR check | **Compile-only** (`build_app` skip-archive/skip-codesign) | There is **no test target**; `run_tests` would fail every PR and block merges. |
+| iOS build number | `CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER` via `xcargs` (NOT `increment_build_number`) | agvtool needs `VERSIONING_SYSTEM` (unset) and edits the pbxproj that xcodegen regenerates. |
+| iOS signing | **Fastlane `match`** (encrypted dist cert+profiles in a private repo) | `-allowProvisioningUpdates`+API key makes *profiles* but not the *Distribution cert*; fresh runners have an empty keychain → archive fails. |
+| App Store step | Promote the tested TestFlight build; `submit_for_review:false` + **`skip_metadata:true`**; human clicks Submit | Apple review is the gate; don't push store metadata on every tag. |
+| OIDC thumbprint | **Omit** (`thumbprint_list` unset) | AWS validates GitHub's OIDC via its root CA store since 2023; the pinned thumbprint is non-load-bearing cruft. |
+| Concurrency | Deploy keyed by **environment** (not ref); `cancel-in-progress:false` | Same-env applies serialize cleanly on the shared lock table; never cancel an apply. |
+| Action pinning | Pin security-sensitive actions to **commit SHAs** (`configure-aws-credentials`, `checkout`, `setup-ruby`, `golangci-lint-action`); pin Xcode + xcodegen + golangci-lint versions | A poisoned tag on the role-assuming action is the IAM nightmare made real; floating Xcode/lint = non-reproducible. |
 
 ## Architecture — three triggers
 
 ```
-PR  ──▶ checks only (no deploy):
-        • backend: golangci-lint + go test + go vet  (path: backend/**)
-        • terraform: fmt -check + validate + PLAN (per env) → comment   (path: backend/terraform/**)
-        • ios: simulator build + unit tests, NO signing                 (path: ios/**)
-        required green to merge (branch protection)
+PR  ──▶ checks (no mutation):
+        backend-ci: golangci-lint + go test + go vet                    (path backend/**)
+        tf-plan:    assume READ-ONLY plan role (OIDC) → plan DEV → PR comment
+        ios-ci:     compile-only build, NO signing                      (path ios/**, drafts skipped)
+        branch protection requires these green to merge
 
-merge main ──▶ DEV (automatic):
-        • backend: build.sh → terraform apply  (envs/dev, OIDC dev role)
-        • ios:     fastlane beta → archive(Release) → TestFlight   (build# = github.run_number)
+merge main ──▶ DEV (auto):
+        deploy-dev:  assume deploy-DEV role → build.sh → terraform apply -auto-approve (envs/dev)
+        ios beta:    match(readonly) → build_app (build#=run_number) → TestFlight
 
-tag vX.Y.Z ──▶ PROD (one approval):
-        • GitHub Environment "prod" → teammate approves
-        • backend: build.sh → terraform apply  (envs/prod, OIDC prod role)
-        • ios:     fastlane release → select latest TestFlight build → submit-staging
-                   → human clicks "Submit for Review" in App Store Connect
+tag vX.Y.Z ──▶ PROD (reviewed):
+        plan job:    assume deploy-PROD role → build.sh → terraform plan -out=tfplan (artifact + log)
+        ⏸ GitHub Environment "prod" approval (other teammate reviews the plan)
+        apply job:   assume deploy-PROD role → build.sh → terraform apply tfplan   (== reviewed diff)
+        ios release: promote latest TestFlight build → App Store (staged) → human Submits
 ```
 
 ## Components
 
-**1. `.github/workflows/` (split by concern, path-filtered)**
-- `backend-ci.yml` — PR + push: `lint` (golangci-lint), `test` (`go test` in `pkg`; `go vet` across `pkg`, `functions/api`, `functions/workers/scanworker`, `functions/presignup`, `tests`; all `GOWORK=off`), `tf-check` (fmt+validate+plan). Go 1.26, module cache.
-- `backend-deploy.yml` — `deploy-dev` (push `main`, env `dev`) and `deploy-prod` (push tag `v*`, env `prod`). Both: OIDC assume-role → `scripts/deploy.sh --env <env>`.
-- `ios-ci.yml` — PR (`ios/**`): macOS, simulator build + test, no signing. push `main`: `fastlane beta` (TestFlight). tag `v*`: `fastlane release` (App Store submit-staging) behind env `prod`.
-- Shared: `concurrency` (cancel-in-progress per ref+workflow), pinned action SHAs, `timeout-minutes` on macOS jobs, skip drafts.
+- `.github/workflows/backend-ci.yml` — `lint` (golangci-lint, pinned), `test` (`go test` pkg + `go vet` 5 modules, `GOWORK=off`), `tf-fmt-validate` (no creds), `tf-plan` (OIDC **plan role**, `deploy.sh --env dev --plan-out`, comment).
+- `.github/workflows/backend-deploy.yml` — `deploy-dev` (push `main`, env `dev`, deploy-dev role, `--apply-auto`); `plan-prod`+`apply-prod` (tag `v*`, env `prod` on apply, deploy-prod role, saved-plan handoff). Concurrency by env.
+- `.github/workflows/backend-drift.yml` — nightly `schedule`: plan dev+prod with the read-only role, notify on non-empty diff.
+- `backend/scripts/deploy.sh` — `--env {dev,prod}` + `--plan-out <f>` | `--apply <f>` | `--apply-auto`. Always `build.sh` first.
+- `backend/terraform/github-oidc/` — provider (no thumbprint) + 3 scoped roles + 2 policies (read-only plan; least-priv deploy).
+- `backend/.golangci.yml` — pinned linter set (govet, staticcheck, errcheck, ineffassign, unused).
+- `ios/fastlane/{Appfile,Matchfile,Fastfile}` + `ios/Gemfile` — `test` (compile-only), `beta` (match→build#=run_number→TestFlight), `release` (promote→App Store, skip_metadata).
+- `.github/workflows/ios-ci.yml` — PR compile-only (skip drafts), `beta` on `main`, `release` on tag (env `prod`). Pin Xcode + xcodegen.
+- Terraform `prevent_destroy` on the DynamoDB table + photos bucket (deploy role can otherwise delete them).
 
-**2. `backend/scripts/deploy.sh` (NEW)** — `--env {dev,prod}`: `build.sh` (→ `bin/*.zip`) → `cd terraform/envs/$env` → `terraform init` → `terraform apply -auto-approve`. (Plan variant for PR: `terraform plan -out` + render to comment.)
+## Secrets & one-time setup (👤 Anton)
 
-**3. `terraform/github-oidc/` (NEW, codified)** — `aws_iam_openid_connect_provider` for `token.actions.githubusercontent.com`; role `smachnogo-ci-deploy-dev` (trust: repo, `ref:refs/heads/main` + PR plan) and `smachnogo-ci-deploy-prod` (trust: repo + `environment:prod`); least-privilege policies sufficient for `terraform apply` (TF state S3+Dynamo lock, lambda, apigw, dynamodb, cognito, sqs, s3, iam, logs, ssm). Applied once locally by Anton.
+- Apply `terraform/github-oidc/` once (admin creds) → OIDC provider + 3 roles.
+- Repo secrets/vars: `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN_DEV`, `AWS_DEPLOY_ROLE_ARN_PROD`; `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` (App-Manager role); `MATCH_GIT_URL`, `MATCH_PASSWORD` (or a deploy key) for the certs repo; a failure-notification webhook (`SLACK_WEBHOOK` or similar).
+- **Fastlane match:** create the private certs repo, run `fastlane match appstore` once locally to seed the Distribution cert + App Store profile.
+- GitHub Environments: `dev` (no protection); `prod` (**required reviewer** = the other teammate; scope prod role + ASC/match secrets here).
+- Branch protection on `main`: require `lint`, `test`, `tf-fmt-validate`, `ios-ci` PR checks.
+- **⚠️ LAUNCH-GATE:** revert the beta-generous limits (`free_scan_allowance` 1000→real, `free_window_days` 3650→7, review `daily_scan_cap`) **before the first prod `apply`** — the pipeline auto-ships `main`'s Terraform vars to prod on tag.
 
-**4. `backend/.golangci.yml` (NEW)** — standard linters (govet, staticcheck, errcheck, ineffassign, unused, gofmt/goimports).
+## Implementation phasing
 
-**5. `ios/fastlane/` (NEW)** — `Fastfile` lanes: `test` (simulator, no signing), `beta` (build Release → `pilot`/`upload_to_testflight`, build# = `ENV[GITHUB_RUN_NUMBER]`), `release` (`upload_to_app_store` with `submit_for_review: false`, select latest build). `Appfile` (app id `app.smachnogo.ios`, team `CP598M5SUG`). API-key auth via `app_store_connect_api_key`.
-
-## Secrets & one-time setup (Anton)
-
-- Apply `terraform/github-oidc/` once → creates OIDC provider + 2 roles.
-- GitHub repo secrets/vars: `AWS_DEPLOY_ROLE_ARN_DEV`, `AWS_DEPLOY_ROLE_ARN_PROD`; `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` (App-Manager-role key, base64 so newlines survive).
-- GitHub Environments: `dev` (no protection), `prod` (required reviewer = the other teammate; scope the AWS-prod role + ASC secrets to this env).
-- Branch protection on `main`: require `backend-ci` + `ios-ci`(PR) status checks.
-
-## Implementation phasing (value-first)
-
-1. **Phase 1 — Backend checks + AWS delivery.** Split/modernize `backend-ci.yml` (lint+test+tf-check, path-filtered, concurrency, pinned SHAs); write `deploy.sh`; `terraform/github-oidc/`; `deploy-dev` (auto) + `deploy-prod` (tag, gated). *Delivers the core: no local backend, real deploys.*
-2. **Phase 2 — iOS TestFlight.** `ios/fastlane/` + `ios-ci.yml` PR sim-build + `beta` on merge→TestFlight.
-3. **Phase 3 — iOS App Store.** `release` lane on tag (promote tested build, human submits) behind `prod` env.
+1. **Phase 1 — Backend checks + AWS delivery.** backend-ci (lint/test/vet/fmt-validate + **tf-plan-on-PR**); `github-oidc` (3 scoped roles); `deploy.sh` (plan/apply-saved-plan/apply-auto); deploy-dev (auto) + plan-prod→approve→apply-prod; drift workflow; `prevent_destroy`; pins. *Closes the real gap, safely.*
+2. **Phase 2 — iOS TestFlight.** Fastlane (`match` + compile-only `test` + `beta`); ios-ci PR compile-check + `beta` on merge; pin Xcode/xcodegen.
+3. **Phase 3 — iOS App Store.** `release` lane (promote tested build, skip_metadata, human Submit) on tag behind `prod`.
 
 ## Risks / watch-outs (mitigations baked in)
 
-- **Build-number monotonicity** → drive from `github.run_number`.
-- **Build reuse** → tag's App Store step promotes the existing TestFlight build; no re-archive.
-- **Plan == apply on same commit** → prod `tf plan` at PR and `apply` at tag must be the same diff; rely on tagged-commit checkout.
-- **Signing on ephemeral runners** → API-key cloud signing (`-allowProvisioningUpdates`) or `match`; never local keychain.
-- **`.p8` handling** → base64 secret, App-Manager (not Admin) role, env-scoped.
-- **Shared AWS account blast radius** → keep dev/prod TF states non-cross-referencing; prod role scoped to `environment:prod`.
+- **Account takeover via broad IAM** → least-priv scoped policy; PR only ever assumes the read-only role; block `AdministratorAccess` attach; `iam:PassRole`→lambda only.
+- **Approving an unseen apply** → prod = plan → approval → apply the saved plan (same commit rebuilds identical zips → hash matches).
+- **iOS PR check that can't pass / broken build#** → compile-only lane; build# via `xcargs`; `match` for signing.
+- **Concurrent applies on shared lock** → concurrency by env; document `force-unlock`; nightly drift plan.
+- **No rollback** → documented: dev = revert+merge; prod = re-tag previous good SHA; `prevent_destroy` on stateful resources.
+- **Non-reproducible toolchain** → pin action SHAs, Xcode, xcodegen, golangci-lint versions.
+- **Silent failures (2-person team)** → notify on `backend-deploy`/`ios beta` failure + on prod approval request.
+- **Beta limits leaking to prod** → LAUNCH-GATE revert before first prod apply.
 - **Export compliance** → already set (`ITSAppUsesNonExemptEncryption: NO`).
-- **macOS cost** → path filter `ios/**`, pin `macos-15` + Xcode, cache SPM/DerivedData, `concurrency` cancel, `timeout-minutes`, skip drafts.
 
 ## Out of scope
 
-- Multi-account AWS isolation; blue/green or canary backend deploys; auto-release-to-App-Store (Apple review stays a human gate); load/integration tests requiring live Gemini/AWS in PR CI (the `//go:build live` and `//go:build eval` suites stay manual/opt-in).
+Multi-account isolation; blue/green/canary; auto-release-to-App-Store (Apple review stays human); live Gemini/AWS integration+eval suites in PR CI (`//go:build live`/`eval` stay opt-in); adding an iOS unit-test target (compile-only for now — a real test target is a worthwhile later addition).
