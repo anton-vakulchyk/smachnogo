@@ -1,6 +1,10 @@
 # Photo bucket: private, TLS-only, originals expire at 90 days.
 resource "aws_s3_bucket" "photos" {
   bucket = "${local.prefix}-photos-${var.env}-${local.account_id}"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "photos" {

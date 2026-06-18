@@ -1,0 +1,26 @@
+name: backend-drift
+on:
+  schedule: [{ cron: "0 13 * * 1-5" }]
+  workflow_dispatch:
+permissions: { contents: read, id-token: write }
+jobs:
+  drift:
+    strategy: { matrix: { env: [dev, prod] } }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ secrets.AWS_PLAN_ROLE_ARN }}", aws-region: us-east-1 }
+      - name: plan (detailed exit code)
+        run: |
+          ./scripts/build.sh
+          terraform -chdir="terraform/envs/${{ matrix.env }}" init -input=false
+          set +e
+          terraform -chdir="terraform/envs/${{ matrix.env }}" plan -input=false -detailed-exitcode
+          code=$?
+          if [ "$code" -eq 2 ]; then echo "⚠️ DRIFT detected in ${{ matrix.env }}" >> "$GITHUB_STEP_SUMMARY"; fi
+          [ "$code" -ne 1 ]   # exit 0 (no drift) or 2 (drift) are fine; 1 = real plan error
+        working-directory: backend
