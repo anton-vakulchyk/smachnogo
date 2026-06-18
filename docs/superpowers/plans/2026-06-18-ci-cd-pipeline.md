@@ -140,8 +140,8 @@ data "aws_iam_policy_document" "readonly" {
     resources = ["arn:aws:s3:::smachnogo-tfstate-${local.acct}", "arn:aws:s3:::smachnogo-tfstate-${local.acct}/*"]
   }
   statement { actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"], resources = ["arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-tfstate-lock"] }
-  statement { # read everything terraform plan inspects
-    actions   = ["lambda:Get*", "lambda:List*", "apigateway:GET", "dynamodb:Describe*", "dynamodb:List*", "sqs:Get*", "sqs:List*", "s3:GetBucket*", "s3:ListBucket", "logs:Describe*", "ssm:Get*", "ssm:Describe*", "cognito-idp:Describe*", "cognito-idp:List*", "cognito-idp:Get*", "events:Describe*", "events:List*", "iam:Get*", "iam:List*"]
+  statement { # read everything terraform plan refreshes (must mirror every service the deploy policy can write)
+    actions   = ["lambda:Get*", "lambda:List*", "apigateway:GET", "dynamodb:Describe*", "dynamodb:List*", "sqs:Get*", "sqs:List*", "s3:GetBucket*", "s3:ListBucket", "logs:Describe*", "logs:ListTagsForResource", "ssm:Get*", "ssm:Describe*", "cognito-idp:Describe*", "cognito-idp:List*", "cognito-idp:Get*", "cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*", "sns:Get*", "sns:List*", "budgets:ViewBudget", "budgets:DescribeBudget*", "iam:Get*", "iam:List*"]
     resources = ["*"]
   }
 }
@@ -156,15 +156,28 @@ data "aws_iam_policy_document" "deploy" {
   statement { actions = ["ssm:*"], resources = ["arn:aws:ssm:us-east-1:${local.acct}:parameter/smachnogo/*"] }
   statement { # services whose ARNs are awkward to enumerate — account/region-scoped, no IAM
     sid       = "AppServices"
-    actions   = ["lambda:*", "apigateway:*", "sqs:*", "logs:*", "cognito-idp:*", "events:*"]
+    actions   = ["lambda:*", "apigateway:*", "sqs:*", "logs:*", "cognito-idp:*"]
+    resources = ["*"]
+  }
+  statement { # observability — envs/*/ops.tf creates an SNS topic+subs, CloudWatch alarms+dashboard, and a Budget. NOTE: cloudwatch is a SEPARATE IAM service from logs.
+    sid       = "AppObservability"
+    actions   = ["cloudwatch:*", "sns:*", "budgets:ViewBudget", "budgets:ModifyBudget"]
     resources = ["*"]
   }
   statement { # IAM: only the app's own roles, never account-wide
     sid       = "AppRoles"
-    actions   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UpdateRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:CreateServiceLinkedRole"]
+    actions   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UpdateRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy"]
     resources = ["arn:aws:iam::${local.acct}:role/smachnogo-*"]
   }
-  statement { # block attaching admin-grade managed policies
+  # NOTE (residual risk): this role can create a smachnogo-* role, attach an
+  # INLINE *:* policy via PutRolePolicy, and PassRole it to a Lambda → it is
+  # effectively account-admin-equivalent for anything it can name. The Deny
+  # below only blocks attaching admin-grade MANAGED policies (defense-in-depth,
+  # not a takeover barrier). The REAL control is the trust boundary: only
+  # main / the prod environment can assume the deploy roles, never a PR.
+  # Fast-follow hardening: attach a permissions boundary requiring every
+  # created role to carry that boundary (caps escalation). Tracked, not v1.
+  statement { # defense-in-depth: block attaching admin-grade managed policies
     sid       = "DenyAdminAttach"
     effect    = "Deny"
     actions   = ["iam:AttachRolePolicy"]
@@ -218,13 +231,12 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ "$ENV" = dev ] || [ "$ENV" = prod ] || { echo "--env must be dev|prod" >&2; exit 2; }
 cd "$(dirname "$0")/.."           # backend/
-./scripts/build.sh                # bin/{api,scanworker,presignup}.zip (deterministic per commit)
 TF="terraform -chdir=terraform/envs/$ENV"
 $TF init -input=false
 case "$ACTION" in
-  plan)       $TF plan  -input=false -out="$FILE" ;;
-  apply)      $TF apply -input=false "$FILE" ;;          # apply the SAVED, reviewed plan
-  apply-auto) $TF apply -input=false -auto-approve ;;    # dev only (plan reviewed on PR)
+  plan)       ./scripts/build.sh; $TF plan -input=false -out="$FILE" ;;
+  apply)      $TF apply -input=false "$FILE" ;;          # apply the SAVED plan; reuse the zip the plan step built (no rebuild → hash stays valid)
+  apply-auto) ./scripts/build.sh; $TF apply -input=false -auto-approve ;;  # dev only (plan reviewed on PR)
   *) echo "need --plan-out|--apply|--apply-auto" >&2; exit 2 ;;
 esac
 ```
@@ -263,8 +275,11 @@ jobs:
         run: |
           ./scripts/build.sh
           terraform -chdir="terraform/envs/${{ matrix.env }}" init -input=false
-          terraform -chdir="terraform/envs/${{ matrix.env }}" plan -input=false -detailed-exitcode || \
-            echo "DRIFT in ${{ matrix.env }} (exit $?)" >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          terraform -chdir="terraform/envs/${{ matrix.env }}" plan -input=false -detailed-exitcode
+          code=$?
+          if [ "$code" -eq 2 ]; then echo "⚠️ DRIFT detected in ${{ matrix.env }}" >> "$GITHUB_STEP_SUMMARY"; fi
+          [ "$code" -ne 1 ]   # exit 0 (no drift) or 2 (drift) are fine; 1 = real plan error
         working-directory: backend
 ```
 - [ ] **Step 3: Verify** — `actionlint .github/workflows/backend-drift.yml`; `terraform fmt -check -recursive backend/terraform`.
@@ -356,11 +371,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - uses: aws-actions/configure-aws-credentials@v4
         with: { role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}", aws-region: us-east-1 }
-      # Rebuild (same tag commit → identical zips → source_code_hash matches the saved plan),
-      # re-plan to the same file, and apply it. (A saved plan can't cross runners, so we
-      # re-init + apply with the same inputs; the prod approval gates THIS job.)
+      # ONE build in this job → plan → apply that exact file (no second build, so the
+      # zip the plan captured is the zip we apply). The prod approval gates THIS job;
+      # the approver reviewed the plan-prod artifact (same tag commit → same diff).
       - run: ./scripts/deploy.sh --env prod --plan-out prod.tfplan
-      - run: terraform -chdir=terraform/envs/prod apply -input=false prod.tfplan
+      - run: ./scripts/deploy.sh --env prod --apply prod.tfplan
 ```
 > Rationale: the saved-plan artifact from `plan-prod` is what the **approver reviews**; `apply-prod` (gated) regenerates the identical plan on the same tag commit and applies it. This keeps "approve a real diff" without shipping a binary plan file between runners.
 
@@ -407,8 +422,11 @@ platform :ios do
   lane :beta do
     api = asc_key
     match(type: "appstore", readonly: true, api_key: api)
+    # CODE_SIGN_STYLE=Manual: project.yml sets Automatic, which fights match's
+    # explicit profile on a fresh runner. Force manual + the match profile.
     build_app(project: "Smachnogo.xcodeproj", scheme: "Smachnogo", export_method: "app-store",
-              xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('GITHUB_RUN_NUMBER')}")
+              xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('GITHUB_RUN_NUMBER')} CODE_SIGN_STYLE=Manual",
+              export_options: { signingStyle: "manual" })
     upload_to_testflight(api_key: api, skip_waiting_for_build_processing: true)
   end
 end
@@ -522,4 +540,9 @@ jobs:
 
 **Consistency:** role names (`smachnogo-ci-plan|deploy-dev|deploy-prod`) ↔ secret names (`AWS_PLAN_ROLE_ARN|_DEV|_PROD`) ↔ workflow `role-to-assume` ↔ Task 6 `gh secret set`. `deploy.sh` flags (`--plan-out/--apply/--apply-auto`) match every caller. `asc_key` helper shared by `beta`+`release`. ✓
 
-**Caveats for the executor:** golangci-lint may flag WIP backend code (narrow `enable`, don't disable); first `match` run needs the certs repo seeded (Task 7 Step 7) or `beta` fails — that's a 👤 prerequisite, not an agent step; pin action SHAs + xcodegen version as a hardening follow-up.
+**Caveats for the executor (rev 3):**
+- golangci-lint may flag WIP backend code (narrow `enable`, don't disable).
+- First `match` run needs the certs repo seeded (Task 7 Step 7) or `beta` fails — 👤 prerequisite, not an agent step.
+- **IAM residual risk (accepted for v1):** the deploy role is effectively account-admin-equivalent via inline-policy + `PassRole`→Lambda; the `DenyAdminAttach` is defense-in-depth only. The real control is the trust boundary (main / prod-env, never PR). Add a permissions boundary as a fast-follow if the threat model warrants.
+- **Prod plan==apply** holds only if `build.sh` is reproducible. It currently isn't fully (`zip -j` records mtimes; no `-trimpath`) — so `apply-prod`'s re-plan may show the same Lambda-code update the approver saw (same direction, safe) but not a byte-identical artifact. Easy hardening: add `-trimpath` to the `go build` and normalize zip timestamps in `build.sh`.
+- SHA-pinning of actions + xcodegen version pin are documented follow-ups, NOT delivered in this rev (YAML still uses `@vN` tags).

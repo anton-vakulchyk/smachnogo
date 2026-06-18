@@ -22,10 +22,10 @@ Replace the half-built `ci.yml` with a proper, low-ceremony, **safe** pipeline s
 | Dev deploy | Auto on merge to `main` (backend `apply -auto-approve` + iOS→TestFlight) | "No local backend"; dev's plan was already reviewed on the PR. |
 | Prod deploy | Tag `vX.Y.Z` → **plan job → `prod` Environment approval → apply the *saved* plan** | The approval reviews a **real diff**, and apply == exactly what was approved. |
 | AWS auth | **OIDC, 3 roles**: read-only **plan** (trusts `main` + `pull_request`), **deploy-dev** (trusts `main` only), **deploy-prod** (trusts `environment:prod` only) | A `pull_request`-assumable role must be **read-only**; write/IAM roles never trust PRs. |
-| IAM scope | **Least-privilege**: app actions scoped to `smachnogo-*` / app ARNs; `iam:*`→ scoped role-CRUD on `role/smachnogo-*` + `iam:PassRole` limited to `lambda.amazonaws.com` + block attaching `AdministratorAccess` | A `iam:*`-on-`*` deploy role = account-takeover on any compromised step. Trust limits *who calls*; the policy must limit *what a call can do*. |
+| IAM scope | **Scoped** (not `iam:*`-on-`*`): app actions on `smachnogo-*`/app ARNs **incl. `sns`/`cloudwatch`/`budgets`** (ops.tf needs them; cloudwatch ≠ logs); IAM role-CRUD limited to `role/smachnogo-*`, `iam:PassRole`→`lambda.amazonaws.com`; managed-admin-attach denied (defense-in-depth) | Removes the account-takeover-on-any-step blast radius. **Residual (accepted v1):** inline-policy + `PassRole` still makes the role admin-equivalent for `smachnogo-*`; the **trust boundary** (main / prod-env, never PR) is the real control. Permissions-boundary = fast-follow. |
 | iOS PR check | **Compile-only** (`build_app` skip-archive/skip-codesign) | There is **no test target**; `run_tests` would fail every PR and block merges. |
 | iOS build number | `CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER` via `xcargs` (NOT `increment_build_number`) | agvtool needs `VERSIONING_SYSTEM` (unset) and edits the pbxproj that xcodegen regenerates. |
-| iOS signing | **Fastlane `match`** (encrypted dist cert+profiles in a private repo) | `-allowProvisioningUpdates`+API key makes *profiles* but not the *Distribution cert*; fresh runners have an empty keychain → archive fails. |
+| iOS signing | **Fastlane `match`** (encrypted dist cert+profiles in a private repo) + force **`CODE_SIGN_STYLE=Manual`** in the archive | `-allowProvisioningUpdates`+API key makes *profiles* but not the *Distribution cert*; fresh runners have an empty keychain → archive fails. `project.yml` is `Automatic`, which fights match's explicit profile → must override to Manual. |
 | App Store step | Promote the tested TestFlight build; `submit_for_review:false` + **`skip_metadata:true`**; human clicks Submit | Apple review is the gate; don't push store metadata on every tag. |
 | OIDC thumbprint | **Omit** (`thumbprint_list` unset) | AWS validates GitHub's OIDC via its root CA store since 2023; the pinned thumbprint is non-load-bearing cruft. |
 | Concurrency | Deploy keyed by **environment** (not ref); `cancel-in-progress:false` | Same-env applies serialize cleanly on the shared lock table; never cancel an apply. |
@@ -69,7 +69,7 @@ tag vX.Y.Z ──▶ PROD (reviewed):
 - Repo secrets/vars: `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN_DEV`, `AWS_DEPLOY_ROLE_ARN_PROD`; `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` (App-Manager role); `MATCH_GIT_URL`, `MATCH_PASSWORD` (or a deploy key) for the certs repo; a failure-notification webhook (`SLACK_WEBHOOK` or similar).
 - **Fastlane match:** create the private certs repo, run `fastlane match appstore` once locally to seed the Distribution cert + App Store profile.
 - GitHub Environments: `dev` (no protection); `prod` (**required reviewer** = the other teammate; scope prod role + ASC/match secrets here).
-- Branch protection on `main`: require `lint`, `test`, `tf-fmt-validate`, `ios-ci` PR checks.
+- Branch protection on `main`: require `lint`, `test`, `tf-fmt-validate`, `tf-plan` (NOT `ios-ci` — its `test` job is skipped on backend-only PRs, so requiring it would wedge backend PRs).
 - **⚠️ LAUNCH-GATE:** revert the beta-generous limits (`free_scan_allowance` 1000→real, `free_window_days` 3650→7, review `daily_scan_cap`) **before the first prod `apply`** — the pipeline auto-ships `main`'s Terraform vars to prod on tag.
 
 ## Implementation phasing
@@ -80,7 +80,8 @@ tag vX.Y.Z ──▶ PROD (reviewed):
 
 ## Risks / watch-outs (mitigations baked in)
 
-- **Account takeover via broad IAM** → least-priv scoped policy; PR only ever assumes the read-only role; block `AdministratorAccess` attach; `iam:PassRole`→lambda only.
+- **Account takeover via broad IAM** → scoped policy (app actions + `sns`/`cloudwatch`/`budgets`, no `iam:*`-on-`*`); PR only ever assumes the read-only role; managed-admin-attach denied; `iam:PassRole`→lambda only. **Residual:** inline-policy + `PassRole` keeps the role admin-equivalent for `smachnogo-*` — the trust boundary (main/prod-env, never PR) is the real control; permissions-boundary is the hardening fast-follow.
+- **Under-privileged policy breaks `apply`** → the deploy policy must mirror EVERY service the env `.tf` creates (lambda, apigw, dynamodb, s3, ssm, cognito, sqs, logs, **cloudwatch, sns, budgets**); readonly mirrors the reads. Verified against `envs/*/ops.tf`.
 - **Approving an unseen apply** → prod = plan → approval → apply the saved plan (same commit rebuilds identical zips → hash matches).
 - **iOS PR check that can't pass / broken build#** → compile-only lane; build# via `xcargs`; `match` for signing.
 - **Concurrent applies on shared lock** → concurrency by env; document `force-unlock`; nightly drift plan.
