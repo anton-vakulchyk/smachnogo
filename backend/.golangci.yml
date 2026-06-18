@@ -1,0 +1,33 @@
+version: "2"
+run:
+  go: "1.26"
+linters:
+  default: none
+  enable: [govet, staticcheck, errcheck, ineffassign, unused]
+  settings:
+    staticcheck:
+      # Reproduce golangci-lint's built-in default set (so we don't silently
+      # re-enable the ST* doc-comment/initialism checks that ship disabled),
+      # then drop the two opinionated quick-fixes we don't want gating:
+      #   QF1008 — "remove embedded field from selector" (meal.Nutrients.X →
+      #            meal.X); the explicit qualifier is intentional here, Meal
+      #            embeds both Nutrients and Scores.
+      #   QF1001 — "apply De Morgan's law"; the !(lo <= x && x <= hi) form
+      #            reads as "not in range" and is clearer than the rewrite.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1008
+        - -QF1001
+  exclusions:
+    # Built-in preset: ignores unchecked Close/Flush/print/Setenv errors
+    # (errcheck). Covers the two `defer resp.Body.Close()` / `out.Body.Close()`
+    # sites — idiomatic and not worth a wrapper. No other preset is enabled,
+    # so real staticcheck/errcheck findings still gate.
+    presets:
+      - std-error-handling
