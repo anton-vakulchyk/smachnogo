@@ -1,23 +1,47 @@
 name: backend-ci
+# Always runs (no top-level path filter) so the `ci-passed` sentinel ALWAYS
+# reports — branch protection requires only `ci-passed`, which avoids the
+# monorepo trap where a required path-filtered check never reports on an
+# unrelated PR (iOS/docs-only) and wedges the merge. The `changes` job decides
+# which work actually runs.
 on:
-  pull_request: { paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
-  push: { branches: [main], paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
+  pull_request:
+  push:
+    branches: [main]
 concurrency: { group: "backend-ci-${{ github.ref }}", cancel-in-progress: true }
 permissions: { contents: read }
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.f.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: dorny/paths-filter@v3
+        id: f
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/backend-ci.yml'
+
   lint:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
       - uses: golangci/golangci-lint-action@v9
-        # golangci-lint v2 (matches the `version: "2"` .golangci.yml schema)
-        # requires action @v7+; @v6 only installs v1.x, whose latest (v1.64.8,
-        # built with go1.24) is rejected against the go1.26 target. v2.12.2 is
-        # built with current Go and pinned for reproducibility.
+        # golangci-lint v2 (matches the `version: "2"` .golangci.yml) requires
+        # action @v7+; @v6 only installs v1.x, rejected by the go1.26 floor.
         with: { version: v2.12.2, working-directory: backend/pkg }
+
   test:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: backend } }
     steps:
@@ -31,7 +55,10 @@ jobs:
           for m in pkg functions/api functions/workers/scanworker functions/presignup tests; do
             (cd "$m" && GOWORK=off go vet ./...)
           done
+
   tf-fmt-validate:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,17 +66,17 @@ jobs:
       - run: terraform fmt -check -recursive backend/terraform
       - name: validate dev & prod
         run: |
-          # `terraform validate` eagerly evaluates filebase64sha256(bin/*.zip),
-          # so the referenced files must exist. Placeholder zips suffice —
-          # validate checks config, not artifact bytes (real zips are built at
-          # plan/apply).
+          # validate eagerly evaluates filebase64sha256(bin/*.zip); placeholder
+          # files suffice (validate checks config, not artifact bytes).
           mkdir -p backend/bin && touch backend/bin/api.zip backend/bin/scanworker.zip backend/bin/presignup.zip
           for env in dev prod; do
             terraform -chdir="backend/terraform/envs/$env" init -backend=false
             terraform -chdir="backend/terraform/envs/$env" validate
           done
+
   tf-plan:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions: { contents: read, id-token: write, pull-requests: write }
     defaults: { run: { working-directory: backend } }
@@ -68,3 +95,18 @@ jobs:
             const fs = require('fs');
             const body = "### Terraform plan (dev)\n```\n" + fs.readFileSync('/tmp/plan.txt','utf8').slice(-60000) + "\n```";
             github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+
+  # Sentinel: always runs (no path filter on the workflow), aggregates the
+  # conditional jobs. Branch protection requires ONLY this check. Passes when
+  # every required job is success OR skipped; fails if any failed/cancelled.
+  ci-passed:
+    needs: [lint, test, tf-fmt-validate, tf-plan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for r in "${{ needs.lint.result }}" "${{ needs.test.result }}" "${{ needs.tf-fmt-validate.result }}" "${{ needs.tf-plan.result }}"; do
+            echo "job result: $r"
+            case "$r" in failure|cancelled) echo "::error::a required backend job $r"; exit 1;; esac
+          done
+          echo "all required backend jobs passed or were skipped"
