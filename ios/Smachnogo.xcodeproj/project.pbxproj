@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		10C52B5EEF026FBFE8BA2665 /* SettingsButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832105B0A627644E84110BE0 /* SettingsButton.swift */; };
 		141793B7F425D322848B2A82 /* LimitsEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACD40C59CE7E17D26A1BD97 /* LimitsEditorSheet.swift */; };
+		1B82FC7482536A229341E309 /* ScanAccessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4AD2D891C4C9CDEB513B1D4 /* ScanAccessory.swift */; };
 		28A35332B69E63473C3BC0C4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE3C095585C5BB88AB716E3 /* Models.swift */; };
 		3838F74908D304157BF7F365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14832D0BB58E3B64005040B /* RootTabView.swift */; };
 		393EE5771563E343D0D496F3 /* MealEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */; };
@@ -56,6 +58,7 @@
 		747AA4CB7B1F22E68EE19415 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		764E5BDEF6E503F035A69BE9 /* DateUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateUtil.swift; sourceTree = "<group>"; };
 		81121946E8DDB2EFD355F0B9 /* CognitoTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CognitoTokenProvider.swift; sourceTree = "<group>"; };
+		832105B0A627644E84110BE0 /* SettingsButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsButton.swift; sourceTree = "<group>"; };
 		871DCF45BBB435B902621FD7 /* Smachnogo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Smachnogo.entitlements; sourceTree = "<group>"; };
 		888B409138221D6EB68B8DDA /* AppleLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinkService.swift; sourceTree = "<group>"; };
 		8BC8A1C67222242B2EBF5953 /* ScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanService.swift; sourceTree = "<group>"; };
@@ -64,6 +67,7 @@
 		9BC569FFFD73DA8A527FFCBA /* LimitsRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsRule.swift; sourceTree = "<group>"; };
 		A14832D0BB58E3B64005040B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		A47335E5CC0ED933E42A4874 /* PendingScanQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingScanQueue.swift; sourceTree = "<group>"; };
+		B4AD2D891C4C9CDEB513B1D4 /* ScanAccessory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanAccessory.swift; sourceTree = "<group>"; };
 		BB76D6C7105B7AAEDEEE21C1 /* MealEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEditSheet.swift; sourceTree = "<group>"; };
 		BB91F21E583DB0624E7B3ED8 /* Smachnogo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Smachnogo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD4E4EEE8C0DCD603572E135 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -109,6 +113,8 @@
 			children = (
 				485B8AC20D8CD5030BFC1BE0 /* AppConfig.swift */,
 				A14832D0BB58E3B64005040B /* RootTabView.swift */,
+				B4AD2D891C4C9CDEB513B1D4 /* ScanAccessory.swift */,
+				832105B0A627644E84110BE0 /* SettingsButton.swift */,
 				371405627404C5912F29754A /* SmachnogoApp.swift */,
 			);
 			path = App;
@@ -340,9 +346,11 @@
 				5ABBE901FADFE48F04A30BD7 /* PaywallView.swift in Sources */,
 				75911023BC9683AA5B75F348 /* PendingScanQueue.swift in Sources */,
 				3838F74908D304157BF7F365 /* RootTabView.swift in Sources */,
+				1B82FC7482536A229341E309 /* ScanAccessory.swift in Sources */,
 				C2BFC3EC0FD6ADF37A8A83D2 /* ScanFlowView.swift in Sources */,
 				C14D4F0A582906B24B0689FD /* ScanResultView.swift in Sources */,
 				762F04F087E55B97DFB9A734 /* ScanService.swift in Sources */,
+				10C52B5EEF026FBFE8BA2665 /* SettingsButton.swift in Sources */,
 				689C88199D7AD542FD39B124 /* SettingsView.swift in Sources */,
 				FA9DB04D5C2CCCDB83C82285 /* SmachnogoApp.swift in Sources */,
 				4ACC70676782FBD7E64BB510 /* StatsView.swift in Sources */,
@@ -481,7 +489,7 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;
@@ -510,7 +518,7 @@
 				CODE_SIGN_ENTITLEMENTS = Smachnogo/Smachnogo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = CP598M5SUG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Smachnogo/Info.plist;

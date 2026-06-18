@@ -219,6 +219,9 @@ struct SettingsView: View {
         Task {
             do {
                 try await service.deleteAccount()
+                // Account wiped — clear the first-run onboarding flag so the
+                // diary empty state returns to "Add your first meal".
+                UserDefaults.standard.removeObject(forKey: "hasLoggedAnyMeal")
                 deleted = true
             } catch {
                 errorText = error.localizedDescription

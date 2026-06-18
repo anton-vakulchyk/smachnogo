@@ -1,77 +1,77 @@
 import SwiftUI
 
-/// Photos-style floating bottom bar: a pill with the Diary/Stats tabs on
-/// the left, a detached circular Scan button on the right. Custom (not the
-/// system tab bar) so it renders identically from iOS 17 up and the right
-/// circle can be an ACTION — it jumps to the diary and opens the camera.
+/// The app shell: a native TabView (Diary · Stats) so it renders the iOS 26
+/// Liquid-Glass bar for free and degrades to the standard bar on 17–25. The
+/// meal-add action lives in a bottom accessory (system-synced on 26, a
+/// pinned material pill on 17–25). Because the accessory sits outside
+/// DayView — which owns the scan/queue flow — taps switch to the Diary tab
+/// and hand DayView an AddMealAction to perform.
 struct RootTabView: View {
-    enum Tab { case diary, stats }
+    enum Tab: Hashable { case diary, stats }
 
     @State private var selected: Tab = .diary
-    /// Incremented by the Scan button; DayView reacts by opening the camera.
-    @State private var scanRequests = 0
+    @State private var addAction: AddMealAction?
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Both views stay alive (opacity switch) so tab flips don't
-            // reset scroll position or in-flight state.
-            DayView(scanRequests: $scanRequests)
-                .opacity(selected == .diary ? 1 : 0)
-                .allowsHitTesting(selected == .diary)
+        if #available(iOS 26, *) {
+            glassTabView
+        } else {
+            fallbackTabView
+        }
+    }
+
+    @available(iOS 26, *)
+    private var glassTabView: some View {
+        TabView(selection: $selected) {
+            SwiftUI.Tab("Diary", systemImage: "book", value: Tab.diary) {
+                DayView(addAction: $addAction)
+            }
+            SwiftUI.Tab("Stats", systemImage: "chart.bar", value: Tab.stats) {
+                StatsView()
+            }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory {
+            ScanAccessory { trigger($0) }
+        }
+    }
+
+    private var fallbackTabView: some View {
+        TabView(selection: $selected) {
+            DayView(addAction: $addAction)
+                .modifier(ScanAccessoryPill { trigger($0) })
+                .tabItem { Label("Diary", systemImage: "book") }
+                .tag(Tab.diary)
             StatsView()
-                .opacity(selected == .stats ? 1 : 0)
-                .allowsHitTesting(selected == .stats)
-
-            bottomBar
+                .modifier(ScanAccessoryPill { trigger($0) })
+                .tabItem { Label("Stats", systemImage: "chart.bar") }
+                .tag(Tab.stats)
         }
     }
 
-    private var bottomBar: some View {
-        HStack {
-            HStack(spacing: 0) {
-                tabSegment(.diary, "Diary", "book")
-                tabSegment(.stats, "Stats", "chart.bar")
-            }
-            .padding(4)
-            .background(.regularMaterial, in: Capsule())
-            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-
-            Spacer()
-
-            Button {
-                selected = .diary
-                scanRequests += 1
-            } label: {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 21, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 62, height: 62)
-                    .background(.regularMaterial, in: Circle())
-                    .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-            }
-            .accessibilityLabel("Scan a meal")
-        }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 4)
+    /// Adds always route through the Diary tab (it owns the scan/queue flow).
+    private func trigger(_ action: AddMealAction) {
+        selected = .diary
+        addAction = action
     }
+}
 
-    private func tabSegment(_ tab: Tab, _ title: String, _ icon: String) -> some View {
-        let isSelected = selected == tab
-        return Button {
-            selected = tab
-        } label: {
-            VStack(spacing: 3) {
-                Image(systemName: isSelected ? icon + ".fill" : icon)
-                    .font(.system(size: 19, weight: .medium))
-                Text(title).font(.caption2.weight(.medium))
-            }
-            .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-            .frame(width: 86, height: 54)
-            .background(isSelected ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: Capsule())
+/// iOS 17–25 fallback: pins the "Scan a meal" pill above the bottom edge of a
+/// tab's CONTENT. Applied to each tab's content (NOT the TabView) — applying a
+/// bottom `safeAreaInset` to the TabView places the pill inside the standard
+/// tab bar's own safe-area region, overlapping and blocking the tabs.
+private struct ScanAccessoryPill: ViewModifier {
+    let onAction: (AddMealAction) -> Void
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom) {
+            ScanAccessory(onAction: onAction)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 4)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -6,8 +6,9 @@ import AVFoundation
 /// planned meals, tap to edit, scan via camera/library. The empty state IS
 /// the onboarding.
 struct DayView: View {
-    /// Bumped by the floating Scan button (RootTabView) — opens the camera.
-    @Binding var scanRequests: Int
+    /// Set by the bottom-bar accessory (RootTabView) to drive an add flow;
+    /// DayView performs it and clears it back to nil.
+    @Binding var addAction: AddMealAction?
 
     @State private var selectedDate = Date()
     @State private var meals: [Meal] = []
@@ -20,11 +21,14 @@ struct DayView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var activeScan: ActiveScan?
     @State private var editingMeal: Meal?
-    @State private var showSettings = false
     @State private var showManualEntry = false
     @State private var queue = PendingScanQueue.shared
     @State private var store = StoreService.shared
     @State private var showPaywall = false
+
+    /// True once the user has ever had a logged meal — separates a brand-new
+    /// user (surface the methods) from a veteran viewing an empty day (calm).
+    @AppStorage("hasLoggedAnyMeal") private var hasLoggedAnyMeal = false
 
     struct ActiveScan: Identifiable {
         let scanId: String
@@ -43,19 +47,15 @@ struct DayView: View {
                 scansRemainingChip
                 content
             }
-            .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { showManualEntry = true } label: { Image(systemName: "square.and.pencil") }
-                        .accessibilityLabel("Describe a meal")
-                    Button { showLibrary = true } label: { Image(systemName: "photo.on.rectangle") }
-                        .accessibilityLabel("Scan from photo library")
-                    // Camera lives on the floating Scan button (RootTabView).
+                    SettingsButton {
+                        Task {
+                            await load()
+                            await store.refreshServerState()
+                        }
+                    }
                 }
             }
         }
@@ -67,7 +67,8 @@ struct DayView: View {
             // webhook) — un-park photos that were waiting on the paywall.
             if store.isSubscribed { queue.retryPaywalled() }
         }
-        .onChange(of: scanRequests) { _, _ in openCamera() }
+        .onChange(of: addAction) { _, _ in consumeAddAction() }
+        .onAppear { consumeAddAction() }
         .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
         .sheet(isPresented: $showPaywall) {
             PaywallView(reason: store.me.flatMap { $0.scansRemaining <= 0 ? "scans_exhausted" : nil })
@@ -106,14 +107,6 @@ struct DayView: View {
                 Task { await load() }
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(onDataChanged: {
-                Task {
-                    await load()
-                    await store.refreshServerState()
-                }
-            })
-        }
         .alert("Camera access is off", isPresented: $cameraDenied) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -124,10 +117,6 @@ struct DayView: View {
         } message: {
             Text("Enable camera access in Settings, or pick a photo from your library — scanning works either way.")
         }
-    }
-
-    private var navTitle: String {
-        Calendar.current.isDateInToday(selectedDate) ? "Today" : selectedDate.formatted(.dateTime.day().month())
     }
 
     /// Free-tier camera allowance, always visible while it's the scarce
@@ -141,7 +130,7 @@ struct DayView: View {
                     Image(systemName: "camera")
                     Text(me.scansRemaining > 0
                          ? "\(me.scansRemaining) free scan\(me.scansRemaining == 1 ? "" : "s") left"
-                         : "Free scans used — go unlimited")
+                         : "Free scans used — go Premium")
                     Image(systemName: "chevron.right").font(.caption2)
                 }
                 .font(.footnote.weight(.medium))
@@ -188,7 +177,6 @@ struct DayView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .contentMargins(.bottom, 88, for: .scrollContent)
             .refreshable { await load() }
         }
     }
@@ -209,6 +197,21 @@ struct DayView: View {
             }
             .tint(.green)
         }
+    }
+
+    /// Perform a pending add-action from the bottom-bar accessory. Driven by
+    /// BOTH onChange (DayView already on-screen) and onAppear (a Stats→Diary
+    /// switch can mount DayView with addAction already set, and a native
+    /// TabView delivers no onChange for a value present at mount). Clearing to
+    /// nil makes whichever fires second a no-op.
+    private func consumeAddAction() {
+        guard let action = addAction else { return }
+        switch action {
+        case .camera: openCamera()
+        case .library: showLibrary = true
+        case .describe: showManualEntry = true
+        }
+        addAction = nil
     }
 
     private func openCamera() {
@@ -243,6 +246,7 @@ struct DayView: View {
         defer { loading = false }
         do {
             meals = try await mealService.meals(on: dayKey)
+            if !meals.isEmpty { hasLoggedAnyMeal = true }
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -255,22 +259,28 @@ struct DayView: View {
             Image(systemName: isFutureDay ? "calendar.badge.plus" : "camera.viewfinder")
                 .font(.system(size: 56))
                 .foregroundStyle(.secondary)
-            Text(isFutureDay ? "Nothing planned yet" : "Scan your first meal")
+            Text(emptyTitle)
                 .font(.title3.weight(.semibold))
-            Text(isFutureDay
-                 ? "Planning ahead? Scan or describe a meal and pick this date when saving."
-                 : "Point the camera at your plate — calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot.")
+            Text(emptyBody)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            if !isFutureDay {
-                Button { openCamera() } label: {
-                    Label("Scan a meal", systemImage: "camera")
-                        .frame(maxWidth: 220)
+            // First-run only: surface the non-obvious input methods (they
+            // otherwise live behind the accessory's "…"). Scanning itself is
+            // the prominent "Scan a meal" accessory below — no duplicate
+            // primary button here.
+            if !isFutureDay && !hasLoggedAnyMeal {
+                HStack(spacing: 20) {
+                    Button { showManualEntry = true } label: {
+                        Label("Describe", systemImage: "square.and.pencil")
+                    }
+                    Button { showLibrary = true } label: {
+                        Label("Choose photo", systemImage: "photo.on.rectangle")
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .font(.subheadline)
+                .padding(.top, 4)
             }
             if let loadError {
                 Text(loadError).font(.footnote).foregroundStyle(.red).padding(.horizontal)
@@ -278,6 +288,21 @@ struct DayView: View {
             Spacer()
             Spacer()
         }
+    }
+
+    private var emptyTitle: String {
+        if isFutureDay { return "Nothing planned yet" }
+        return hasLoggedAnyMeal ? "Nothing logged yet" : "Add your first meal"
+    }
+
+    private var emptyBody: String {
+        if isFutureDay {
+            return "Planning ahead? Scan or describe a meal and pick this date when saving."
+        }
+        if hasLoggedAnyMeal {
+            return "Tap Scan a meal below to log something for today."
+        }
+        return "Tap Scan a meal below — point the camera at your plate and calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot."
     }
 
     private func totalsHeader(_ logged: [Meal]) -> some View {
