@@ -12,7 +12,10 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
       - uses: golangci/golangci-lint-action@v6
-        with: { version: "v1.64.8", working-directory: backend/pkg }
+        # Must be built with Go >= the project's target (1.26): a v1.x binary
+        # (go1.24) is rejected, and the v2 binary matches the `version: "2"`
+        # .golangci.yml schema. `latest` satisfies both; pin a v2.x tag later.
+        with: { version: latest, working-directory: backend/pkg }
   test:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: backend } }
@@ -35,6 +38,11 @@ jobs:
       - run: terraform fmt -check -recursive backend/terraform
       - name: validate dev & prod
         run: |
+          # `terraform validate` eagerly evaluates filebase64sha256(bin/*.zip),
+          # so the referenced files must exist. Placeholder zips suffice —
+          # validate checks config, not artifact bytes (real zips are built at
+          # plan/apply).
+          mkdir -p backend/bin && touch backend/bin/api.zip backend/bin/scanworker.zip backend/bin/presignup.zip
           for env in dev prod; do
             terraform -chdir="backend/terraform/envs/$env" init -backend=false
             terraform -chdir="backend/terraform/envs/$env" validate
