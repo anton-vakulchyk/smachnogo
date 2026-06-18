@@ -1,0 +1,41 @@
+name: backend-ci
+on:
+  pull_request: { paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
+  push: { branches: [main], paths: ["backend/**", ".github/workflows/backend-ci.yml"] }
+concurrency: { group: "backend-ci-${{ github.ref }}", cancel-in-progress: true }
+permissions: { contents: read }
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - uses: golangci/golangci-lint-action@v6
+        with: { version: "v1.64.8", working-directory: backend/pkg }
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26", cache-dependency-path: backend/pkg/go.sum }
+      - run: GOWORK=off go test ./...
+        working-directory: backend/pkg
+      - name: vet all modules
+        run: |
+          for m in pkg functions/api functions/workers/scanworker functions/presignup tests; do
+            (cd "$m" && GOWORK=off go vet ./...)
+          done
+  tf-fmt-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive backend/terraform
+      - name: validate dev & prod
+        run: |
+          for env in dev prod; do
+            terraform -chdir="backend/terraform/envs/$env" init -backend=false
+            terraform -chdir="backend/terraform/envs/$env" validate
+          done
