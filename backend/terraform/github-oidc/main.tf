@@ -113,7 +113,7 @@ data "aws_iam_policy_document" "readonly" {
       "cognito-idp:Describe*", "cognito-idp:List*", "cognito-idp:Get*",
       "cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*",
       "sns:Get*", "sns:List*",
-      "budgets:ViewBudget", "budgets:DescribeBudget*",
+      "budgets:ViewBudget", "budgets:DescribeBudget*", "budgets:ListTagsForResource",
       "iam:Get*", "iam:List*",
     ]
     resources = ["*"]
@@ -153,7 +153,9 @@ data "aws_iam_policy_document" "deploy" {
   statement { # observability — envs/*/ops.tf creates an SNS topic+subs, CloudWatch alarms+dashboard, and a Budget.
     # NOTE: cloudwatch is a SEPARATE IAM service from logs.
     sid       = "AppObservability"
-    actions   = ["cloudwatch:*", "sns:*", "budgets:ViewBudget", "budgets:ModifyBudget"]
+    # budgets:* — the provider's budget Read calls ListTagsForResource (not
+    # covered by ViewBudget/ModifyBudget); budgets can't escalate, so full is fine.
+    actions   = ["cloudwatch:*", "sns:*", "budgets:*"]
     resources = ["*"]
   }
   statement { # IAM: only the app's own roles, never account-wide
