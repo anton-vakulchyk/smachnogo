@@ -152,7 +152,7 @@ data "aws_iam_policy_document" "deploy" {
   }
   statement { # observability — envs/*/ops.tf creates an SNS topic+subs, CloudWatch alarms+dashboard, and a Budget.
     # NOTE: cloudwatch is a SEPARATE IAM service from logs.
-    sid       = "AppObservability"
+    sid = "AppObservability"
     # budgets:* — the provider's budget Read calls ListTagsForResource (not
     # covered by ViewBudget/ModifyBudget); budgets can't escalate, so full is fine.
     actions   = ["cloudwatch:*", "sns:*", "budgets:*"]
