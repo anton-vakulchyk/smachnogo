@@ -398,6 +398,15 @@ jobs:
 
 ## Phase 2 — iOS TestFlight
 
+> ### ⚠️ Pre-build corrections (independent iOS review, 2026-06-19)
+> The strategy below (match, xcargs build#, compile-only PR, promote-tested-build) is sound, but these **would fail on the first run** — apply them when building Tasks 7-9:
+> 1. **Runner image (Task 8): `macos-15` does NOT ship Xcode 26** — it's Xcode 16.x only. Use `runs-on: macos-26` (GA since 2026-02-26) in *both* iOS jobs, and pin an Xcode version that exists on that image (verify against the runner-images readme at wire-up; macos-26 default is ~26.2 — `26.5` may not be present). Don't float.
+> 2. **`beta` lane must call `setup_ci` first** — ephemeral runners have no unlocked keychain; `match` needs the temp keychain `setup_ci` creates (and it flips match to readonly). Without it, signing fails with "could not find keychain".
+> 3. **Manual signing needs the profile mapping** — `CODE_SIGN_STYLE=Manual` alone is insufficient. Pass `provisioningProfiles: { "app.smachnogo.ios" => "match AppStore app.smachnogo.ios" }` in `export_options`, plus `PROVISIONING_PROFILE_SPECIFIER='match AppStore app.smachnogo.ios'` + `DEVELOPMENT_TEAM=CP598M5SUG` via xcargs (archive phase + export phase both need it). Leave `project.yml`'s `CODE_SIGN_STYLE: Automatic` as-is (local/simulator wants it; CI overrides via xcargs).
+> 4. **`release` lane: version-scope the build selection** — `latest_testflight_build_number(api_key:)` returns the most-recent upload across *all* versions (can even be expired). Use `latest_testflight_build_number(api_key:, version: v)` with `v = get_version_number(...)`, or omit `build_number` entirely (deliver auto-picks the edited version's latest with `skip_binary_upload: true`). Add `precheck_include_in_app_purchases: false` (subscriptions sit in "Missing Metadata" until the first version ships).
+>
+> **ASC key privilege (Task 7 Step 7):** seed the first `fastlane match appstore` with an **Admin** key (it *creates* the Distribution cert — App Manager can't); CI itself can use an App Manager key since it runs `match readonly: true`. Only one Distribution cert exists per team — coordinate between the two of you. **Cost:** pin xcodegen (floating `brew install` silently changes pbxproj generation — the #1 macOS-CI churn source).
+
 ### Task 7: Fastlane (match + compile-only test + beta)
 
 **Files:** Create `ios/Gemfile`, `ios/fastlane/{Appfile,Matchfile,Fastfile}`.

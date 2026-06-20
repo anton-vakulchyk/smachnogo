@@ -28,20 +28,24 @@ variable "daily_estimate_cap" {
   default = 20
 }
 
-# Total free photo scans before the paywall. Configurable; beta-generous so
-# testers (and early users) can keep scanning while subscriptions aren't yet
-# purchasable. Subscribers and free users alike stay bounded by daily_scan_cap.
+# Total free photo scans before the paywall (a one-time grant, no refill).
+# Launch value: 10 — enough to feel the camera across a few meals and build a
+# diary worth keeping, while the paywall lands while purchase intent is high.
+# (Was 1000 during beta, before subscriptions were purchasable.) Subscribers and
+# free users alike stay bounded by daily_scan_cap.
 variable "free_scan_allowance" {
   type    = number
-  default = 1000
+  default = 10
 }
 
-# Free-allowance window in days. Set large during beta so the 1000-scan
-# allowance — not a 7-day clock — is the binding limit. Dial back toward the
-# 7-day product design at launch.
+# Free-allowance window in days: the clock starts on the first scan and the
+# allowance hard-expires after this many days (a second conversion trigger that
+# fires even for light users who never exhaust the count). Launch value: 7 — the
+# product design, mirroring the annual plan's 7-day trial. (Was 3650 during beta
+# so the scan count, not the clock, was the binding limit.)
 variable "free_window_days" {
   type    = number
-  default = 3650
+  default = 7
 }
 
 variable "llm_provider" {

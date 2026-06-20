@@ -152,7 +152,7 @@ data "aws_iam_policy_document" "deploy" {
   }
   statement { # observability — envs/*/ops.tf creates an SNS topic+subs, CloudWatch alarms+dashboard, and a Budget.
     # NOTE: cloudwatch is a SEPARATE IAM service from logs.
-    sid       = "AppObservability"
+    sid = "AppObservability"
     # budgets:* — the provider's budget Read calls ListTagsForResource (not
     # covered by ViewBudget/ModifyBudget); budgets can't escalate, so full is fine.
     actions   = ["cloudwatch:*", "sns:*", "budgets:*"]
@@ -245,3 +245,49 @@ resource "aws_iam_role_policy_attachment" "prod" {
 output "plan_role_arn" { value = aws_iam_role.plan.arn }
 output "dev_role_arn" { value = aws_iam_role.dev.arn }
 output "prod_role_arn" { value = aws_iam_role.prod.arn }
+
+# --- Let the claude-deployer IAM user manage THIS OIDC stack going forward, so
+# future `terraform apply` here no longer needs root. Scoped to the tfstate, the
+# GitHub OIDC provider, and the smachnogo-ci-* roles/policies. Deliberately NO
+# iam:PutUserPolicy on itself (it can refresh but not rewrite its OWN grant —
+# changing this bootstrap policy still requires an admin/root, blocking self-escalation).
+data "aws_iam_user" "claude_deployer" { user_name = "claude-deployer" }
+
+data "aws_iam_policy_document" "oidc_self_manage" {
+  statement {
+    sid       = "TFState"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+    resources = ["arn:aws:s3:::smachnogo-tfstate-${local.acct}", "arn:aws:s3:::smachnogo-tfstate-${local.acct}/*"]
+  }
+  statement {
+    sid       = "TFLock"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+    resources = ["arn:aws:dynamodb:us-east-1:${local.acct}:table/smachnogo-tfstate-lock"]
+  }
+  statement {
+    sid       = "OIDCProvider"
+    actions   = ["iam:GetOpenIDConnectProvider", "iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint", "iam:TagOpenIDConnectProvider", "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider"]
+    resources = ["arn:aws:iam::${local.acct}:oidc-provider/token.actions.githubusercontent.com"]
+  }
+  statement {
+    sid       = "CIRoles"
+    actions   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy"]
+    resources = ["arn:aws:iam::${local.acct}:role/smachnogo-ci-*"]
+  }
+  statement {
+    sid       = "CIPolicies"
+    actions   = ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:ListPolicyVersions", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:TagPolicy"]
+    resources = ["arn:aws:iam::${local.acct}:policy/smachnogo-ci-*"]
+  }
+  statement {
+    sid       = "ReadSelf" # refresh (not rewrite) the bootstrap user-policy on apply
+    actions   = ["iam:GetUser", "iam:GetUserPolicy", "iam:ListUserPolicies", "iam:ListAttachedUserPolicies"]
+    resources = ["arn:aws:iam::${local.acct}:user/claude-deployer"]
+  }
+}
+
+resource "aws_iam_user_policy" "claude_deployer_oidc_self_manage" {
+  name   = "smachnogo-oidc-self-manage"
+  user   = data.aws_iam_user.claude_deployer.user_name
+  policy = data.aws_iam_policy_document.oidc_self_manage.json
+}
