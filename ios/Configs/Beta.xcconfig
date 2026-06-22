@@ -1,0 +1,16 @@
+// Beta points at AWS **dev** — the config used for TestFlight builds, so betas
+// exercise the real AWS dev backend (auto-deployed from main) without touching
+// prod. Release stays on prod (App Store); Debug stays on localhost.
+//
+// Same per-install Cognito auth as Release (no dev-user creds) — just the dev
+// pool/client, so a TestFlight tester signs in exactly like a real user, against
+// the dev user pool. See docs/ios-environments.md.
+//
+// Dev API (terraform output api_url, envs/dev). The `$()` splits the `//` so
+// xcconfig doesn't treat the rest of the line as a comment.
+API_BASE_URL = https:/$()/dy9kj15vph.execute-api.us-east-1.amazonaws.com
+API_BEARER_TOKEN =
+COGNITO_REGION = us-east-1
+COGNITO_CLIENT_ID = 7oki1ajf3fh3v6j3avacim3g8f
+COGNITO_DEV_USERNAME =
+COGNITO_DEV_PASSWORD =

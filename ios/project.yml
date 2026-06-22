@@ -17,8 +17,17 @@ schemes:
     archive:
       config: Release
 
+# Build configurations. Beta is release-optimized but points at AWS dev — it's
+# what TestFlight archives use (`xcodebuild ... -configuration Beta`). Release
+# points at prod for the App Store. Debug is localhost. See docs/ios-environments.md.
+configs:
+  Debug: debug
+  Beta: release
+  Release: release
+
 configFiles:
   Debug: Configs/Debug.xcconfig
+  Beta: Configs/Beta.xcconfig
   Release: Configs/Release.xcconfig
 
 targets:
@@ -47,7 +56,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: CP598M5SUG # Anton Vakulchyk — device builds + SIWA signing
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 8
+        CURRENT_PROJECT_VERSION: 9
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: smachnogo
     info:
