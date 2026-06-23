@@ -15,6 +15,10 @@ struct MealEditSheet: View {
     @State private var working = false
     @State private var errorText: String?
     @State private var confirmDelete = false
+    // Haptics (iOS 17 `.sensoryFeedback`): `selectionTick` bumps on any
+    // portion/variant chip tap; `deletedTick` fires when the meal is deleted.
+    @State private var selectionTick = 0
+    @State private var deletedTick = 0
 
     private let service = MealService()
 
@@ -38,24 +42,24 @@ struct MealEditSheet: View {
                 Section("Meal") {
                     TextField("Name", text: $label)
                     if meal.variants.count > 1 {
-                        HStack(spacing: 6) {
+                        WrapLayout(spacing: 8, lineSpacing: 8) {
                             ForEach(meal.variants.indices, id: \.self) { v in
-                                Button(meal.variants[v].label) { variantIndex = v }
-                                    .font(.caption.weight(variantIndex == v ? .bold : .regular))
-                                    .buttonStyle(.bordered)
-                                    .tint(variantIndex == v ? .accentColor : .secondary)
-                                    .controlSize(.mini)
+                                ChipButton(title: meal.variants[v].label, selected: variantIndex == v) {
+                                    variantIndex = v
+                                    selectionTick &+= 1
+                                }
                             }
                         }
                     }
-                    HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text("Ate").font(.caption).foregroundStyle(.secondary)
-                        ForEach(Self.portionChoices, id: \.0) { (chip, value) in
-                            Button(chip) { portionFactor = value }
-                                .font(.caption.weight(abs(portionFactor - value) < 0.01 ? .bold : .regular))
-                                .buttonStyle(.bordered)
-                                .tint(abs(portionFactor - value) < 0.01 ? .accentColor : .secondary)
-                                .controlSize(.mini)
+                        WrapLayout(spacing: 8, lineSpacing: 8) {
+                            ForEach(Self.portionChoices, id: \.0) { (chip, value) in
+                                ChipButton(title: chip, selected: abs(portionFactor - value) < 0.01) {
+                                    portionFactor = value
+                                    selectionTick &+= 1
+                                }
+                            }
                         }
                     }
                     Text("\(scaledPreviewKcal) kcal at this portion")
@@ -90,6 +94,8 @@ struct MealEditSheet: View {
             .confirmationDialog("Delete this meal?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) { deleteMeal() }
             }
+            .sensoryFeedback(.selection, trigger: selectionTick)
+            .sensoryFeedback(.warning, trigger: deletedTick)
         }
     }
 
@@ -134,6 +140,7 @@ struct MealEditSheet: View {
         Task {
             do {
                 try await service.delete(mealId: meal.mealId, date: meal.date)
+                deletedTick &+= 1
                 onChanged()
                 dismiss()
             } catch {
@@ -147,5 +154,97 @@ struct MealEditSheet: View {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         return f.date(from: day) ?? Date()
+    }
+}
+
+/// A selectable chip with a ≥44pt hit target (HIG), a filled/tinted selected
+/// state (not bold-only, so it survives reduced contrast), and an
+/// `.isSelected` accessibility trait so VoiceOver announces the active choice.
+/// Used for the portion and variant pickers.
+fileprivate struct ChipButton<Label: View>: View {
+    let selected: Bool
+    let action: () -> Void
+    @ViewBuilder let label: Label
+
+    init(selected: Bool, action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.selected = selected
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button(action: action) {
+            label.font(.subheadline.weight(selected ? .semibold : .regular))
+        }
+        .buttonStyle(ChipButtonStyle(selected: selected))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+extension ChipButton where Label == Text {
+    init(title: String, selected: Bool, action: @escaping () -> Void) {
+        self.init(selected: selected, action: action) { Text(title) }
+    }
+}
+
+/// Chip look: pill background, accent fill when selected, ≥44pt tall hit
+/// target, subtle press dim. Selection is conveyed by fill + tinted text/border
+/// so it doesn't rely on weight alone.
+fileprivate struct ChipButtonStyle: ButtonStyle {
+    let selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .foregroundStyle(selected ? Color.white : Color.accentColor)
+            .background(
+                Capsule().fill(selected ? Color.accentColor : Color.accentColor.opacity(0.12))
+            )
+            .overlay(
+                Capsule().strokeBorder(Color.accentColor.opacity(selected ? 0 : 0.4), lineWidth: 1)
+            )
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+/// Minimal flow layout (iOS 16+): lays children left-to-right and wraps to a
+/// new line when the row overflows, so chip rows grow taller at large Dynamic
+/// Type instead of clipping or needing a horizontal scroll.
+fileprivate struct WrapLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0 && x + s.width > maxWidth {
+                widest = max(widest, x - spacing)
+                y += rowHeight + lineSpacing
+                x = 0; rowHeight = 0
+            }
+            x += s.width + spacing
+            rowHeight = max(rowHeight, s.height)
+        }
+        widest = max(widest, x - spacing)
+        return CGSize(width: maxWidth.isFinite ? maxWidth : widest, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = bounds.width
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0 && x + s.width > maxWidth {
+                y += rowHeight + lineSpacing
+                x = 0; rowHeight = 0
+            }
+            v.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y), proposal: ProposedViewSize(s))
+            x += s.width + spacing
+            rowHeight = max(rowHeight, s.height)
+        }
     }
 }
