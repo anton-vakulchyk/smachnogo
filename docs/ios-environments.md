@@ -55,33 +55,32 @@ cd ios
 #    higher than any build already on TestFlight for version 1.0. Then:
 xcodegen generate
 
-# 2. Archive the **Beta** config (→ AWS dev). source the ASC key for signing.
+# 2. Archive the **Beta** config (→ AWS dev). Source the ASC key for signing;
+#    -allowProvisioningUpdates + the key auto-create the distribution cert + the
+#    App Store profile when the machine has none (only an Apple Development cert).
 set -a; . ../backend/secrets/dev.env; set +a   # ASC_KEY_ID, ASC_ISSUER_ID
+AUTH=(-allowProvisioningUpdates
+      -authenticationKeyPath "$PWD/../backend/secrets/AuthKey_${ASC_KEY_ID}.p8"
+      -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
 xcodebuild archive \
   -project Smachnogo.xcodeproj -scheme Smachnogo -configuration Beta \
-  -archivePath build/Smachnogo.xcarchive \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$PWD/../backend/secrets/AuthKey_${ASC_KEY_ID}.p8" \
-  -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+  -destination 'generic/platform=iOS' \
+  -archivePath build/Smachnogo.xcarchive "${AUTH[@]}"
 
-# 3. Export an App Store ipa.
+# 3. Export + upload to TestFlight in ONE step — destination=upload, no altool.
+#    (method app-store-connect is the Xcode 15.3+ name; was app-store.)
 cat > build/ExportOptions.plist <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>method</key><string>app-store</string>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>upload</string>
   <key>teamID</key><string>CP598M5SUG</string>
 </dict></plist>
 PLIST
 xcodebuild -exportArchive -archivePath build/Smachnogo.xcarchive \
-  -exportPath build/export -exportOptionsPlist build/ExportOptions.plist \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$PWD/../backend/secrets/AuthKey_${ASC_KEY_ID}.p8" \
-  -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-
-# 4. Upload to TestFlight.
-xcrun altool --upload-app -f build/export/Smachnogo.ipa --type ios \
-  --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+  -exportPath build/export -exportOptionsPlist build/ExportOptions.plist "${AUTH[@]}"
+# → "Progress 100%: Upload succeeded."   (verified 2026-06-21, build 9)
 ```
 
 The build appears in ASC ▸ TestFlight after processing (a few minutes). Add it to
