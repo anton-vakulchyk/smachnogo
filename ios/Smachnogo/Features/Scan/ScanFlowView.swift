@@ -14,6 +14,9 @@ struct ScanFlowView: View {
     @State private var fetchingJob = false
     @State private var fetchError: String?
     @State private var showPaywall = false
+    // Haptic (iOS 17 `.sensoryFeedback`): bumped once the analyzed result is
+    // ready to show, so the result appearing lands with a `.success` tap.
+    @State private var readyTick = 0
     @Environment(\.dismiss) private var dismiss
 
     private var entry: PendingScanQueue.Entry? {
@@ -36,6 +39,7 @@ struct ScanFlowView: View {
                 await fetchJob()
             }
         }
+        .sensoryFeedback(.success, trigger: readyTick)
     }
 
     /// Fetch the READY job so the result sheet can render. A failure here —
@@ -45,7 +49,10 @@ struct ScanFlowView: View {
         fetchingJob = true
         fetchError = nil
         do {
-            job = try await ScanService().getScan(scanId: scanId)
+            let fetched = try await ScanService().getScan(scanId: scanId)
+            job = fetched
+            // Result is now ready to show — give it a success tap.
+            if fetched.result != nil { readyTick &+= 1 }
         } catch let APIError.http(status, _, _) where status == 404 {
             // Scan belongs to a previous identity (or TTL'd out) —
             // the entry is unrecoverable; clean it up.

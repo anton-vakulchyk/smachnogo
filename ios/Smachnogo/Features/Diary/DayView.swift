@@ -25,6 +25,22 @@ struct DayView: View {
     @State private var queue = PendingScanQueue.shared
     @State private var store = StoreService.shared
     @State private var showPaywall = false
+    @State private var showLimits = false
+
+    /// Drives `.sensoryFeedback` for diary actions (iOS 17). Bumped with a
+    /// concrete feedback each time something log-worthy happens.
+    @State private var feedback: DiaryFeedback?
+    /// Transient "Added to today" toast — set when a Log-again lands on today
+    /// while another day is on screen (the action's result is otherwise
+    /// off-screen, so there'd be no confirmation).
+    @State private var addedToTodayToken = 0
+
+    /// One per haptic kind; `id` changes every fire so repeats re-trigger.
+    private struct DiaryFeedback: Equatable {
+        enum Kind { case success, warning }
+        let kind: Kind
+        let id: Int
+    }
 
     /// True once the user has ever had a logged meal — separates a brand-new
     /// user (surface the methods) from a veteran viewing an empty day (calm).
@@ -47,6 +63,7 @@ struct DayView: View {
                 scansRemainingChip
                 content
             }
+            .overlay(alignment: .bottom) { addedToTodayToast }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -94,17 +111,32 @@ struct DayView: View {
         }
         .sheet(item: $activeScan) { scan in
             ScanFlowView(scanId: scan.scanId, image: scan.image) { _ in
+                fire(.success) // dishes saved from a scan
                 Task { await load() }
             }
         }
         .sheet(isPresented: $showManualEntry) {
             ManualEntrySheet {
+                fire(.success) // a described meal was added
                 Task { await load() }
             }
         }
         .sheet(item: $editingMeal) { meal in
             MealEditSheet(meal: meal) {
+                fire(.success) // a meal was saved/edited; confirm on return
                 Task { await load() }
+            }
+        }
+        .sheet(isPresented: $showLimits) {
+            LimitsEditorSheet {
+                Task { await store.refreshServerState() } // recolor the goal card
+            }
+        }
+        .sensoryFeedback(trigger: feedback) { _, new in
+            switch new?.kind {
+            case .success: return .success
+            case .warning: return .warning
+            case .none: return nil
             }
         }
         .alert("Camera access is off", isPresented: $cameraDenied) {
@@ -147,8 +179,16 @@ struct DayView: View {
         let logged = meals.filter { $0.state == "logged" }
         let planned = meals.filter { $0.state == "planned" }
         let isToday = Calendar.current.isDateInToday(selectedDate)
-        if meals.isEmpty && !loading && !(isToday && !queue.entries.isEmpty) {
+        let hasInProgress = isToday && !queue.entries.isEmpty
+        // Day-switch shows a skeleton instead of blanking — keeps the layout
+        // stable and lets real content cross-fade in. (When today already has
+        // in-progress scans there's a real List to show, so no skeleton.)
+        if loading && meals.isEmpty && !hasInProgress {
+            skeletonList
+                .overlay(alignment: .top) { errorBanner }
+        } else if meals.isEmpty && !hasInProgress {
             emptyState
+                .overlay(alignment: .top) { errorBanner }
         } else {
             List {
                 if isToday && !queue.entries.isEmpty {
@@ -159,7 +199,7 @@ struct DayView: View {
                     }
                 }
                 if !logged.isEmpty {
-                    Section { totalsHeader(logged) }
+                    Section { goalCard(logged) }
                 }
                 if !planned.isEmpty {
                     Section("Planned") {
@@ -177,7 +217,49 @@ struct DayView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .transition(.opacity)
             .refreshable { await load() }
+            // A failed pull-to-refresh on a populated day was silent (stale
+            // data shown with no signal). Surface it inline.
+            .overlay(alignment: .top) { errorBanner }
+        }
+    }
+
+    /// Redacted placeholder rows shown while switching days so the screen
+    /// never blanks. Static sample text gives the redaction realistic shape.
+    private var skeletonList: some View {
+        List {
+            Section { goalCardSkeleton }
+            Section("Meals") {
+                ForEach(0..<4, id: \.self) { _ in
+                    MealRow(meal: Self.placeholderMeal)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .redacted(reason: .placeholder)
+        .disabled(true)
+        .transition(.opacity)
+    }
+
+    /// Inline "couldn't refresh" banner. Visible regardless of whether meals
+    /// are populated — a failed refresh on a populated day is otherwise mute.
+    @ViewBuilder
+    private var errorBanner: some View {
+        if loadError != nil {
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.exclamationmark")
+                Text("Couldn't refresh — showing last saved")
+                    .font(.footnote.weight(.medium))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(.red))
+            .padding(.top, 8)
+            .shadow(radius: 3, y: 1)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -189,14 +271,30 @@ struct DayView: View {
         .swipeActions(edge: .leading) {
             Button {
                 Task {
-                    _ = try? await mealService.logAgainToday(meal)
-                    await load()
+                    do {
+                        _ = try await mealService.logAgainToday(meal)
+                        fire(.success)
+                        // The copy lands on TODAY. If the user is viewing
+                        // another day the new meal is off-screen, so surface a
+                        // brief "Added to today" toast as the only feedback.
+                        if !Calendar.current.isDateInToday(selectedDate) {
+                            withAnimation { addedToTodayToken += 1 }
+                        }
+                        await load()
+                    } catch {
+                        loadError = error.localizedDescription
+                    }
                 }
             } label: {
                 Label("Log again", systemImage: "arrow.counterclockwise")
             }
             .tint(.green)
         }
+    }
+
+    /// Bump the haptic trigger so SwiftUI re-fires even on repeats.
+    private func fire(_ kind: DiaryFeedback.Kind) {
+        feedback = DiaryFeedback(kind: kind, id: (feedback?.id ?? 0) + 1)
     }
 
     /// Perform a pending add-action from the bottom-bar accessory. Driven by
@@ -243,13 +341,18 @@ struct DayView: View {
 
     private func load() async {
         loading = true
-        defer { loading = false }
+        defer { withAnimation(.easeInOut(duration: 0.2)) { loading = false } }
         do {
-            meals = try await mealService.meals(on: dayKey)
-            if !meals.isEmpty { hasLoggedAnyMeal = true }
-            loadError = nil
+            let fetched = try await mealService.meals(on: dayKey)
+            if !fetched.isEmpty { hasLoggedAnyMeal = true }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                meals = fetched
+                loadError = nil
+            }
         } catch {
-            loadError = error.localizedDescription
+            // Keep whatever meals we have (stale > blank); surface the failure
+            // inline via errorBanner rather than only in the empty state.
+            withAnimation { loadError = error.localizedDescription }
         }
     }
 
@@ -282,12 +385,11 @@ struct DayView: View {
                 .font(.subheadline)
                 .padding(.top, 4)
             }
-            if let loadError {
-                Text(loadError).font(.footnote).foregroundStyle(.red).padding(.horizontal)
-            }
             Spacer()
             Spacer()
         }
+        // loadError is surfaced by the shared errorBanner overlay (so it shows
+        // on populated days too) — no separate empty-state copy needed.
     }
 
     private var emptyTitle: String {
@@ -305,14 +407,107 @@ struct DayView: View {
         return "Tap Scan a meal below — point the camera at your plate and calories, macros and nutrition appear in seconds.\n\nTip: for packaged food, include the label in the shot."
     }
 
-    private func totalsHeader(_ logged: [Meal]) -> some View {
+    // MARK: - Daily goal / progress card
+
+    /// Header label for the goal card: "Today" when the selected day is today,
+    /// else the medium-style date (e.g. "Jun 12, 2026").
+    private var cardTitle: String {
+        if Calendar.current.isDateInToday(selectedDate) { return "Today" }
+        return selectedDate.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// The user's daily limits — same source the calendar dots & Stats use.
+    private var limits: [String: Double] { store.me?.limits ?? [:] }
+
+    /// Replaces the old unlabeled totals strip: a titled summary card. When a
+    /// calorie cap is set, shows consumed-vs-cap on a gauge tinted by the SAME
+    /// `LimitsRule.dayStatus` as the calendar/Stats; otherwise totals + a
+    /// "Set a daily goal" affordance.
+    @ViewBuilder
+    private func goalCard(_ logged: [Meal]) -> some View {
         let totals = logged.reduce(Nutrients.zero) { $0 + $1.nutrients }
-        return HStack {
-            stat("\(totals.caloriesKcal)", "kcal")
+        VStack(alignment: .leading, spacing: 12) {
+            Text(cardTitle)
+                .font(.headline)
+            if let cap = limits["calories_kcal"], cap > 0 {
+                calorieGauge(totals: totals, cap: cap)
+            } else {
+                noGoalSummary(totals)
+            }
+            macroBreakdown(totals)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(accessibilityValue(totals))
+    }
+
+    /// kcal cap set → a gauge, tinted green within limit / red over, via the
+    /// shared LimitsRule (a single-day bucket built from today's totals).
+    @ViewBuilder
+    private func calorieGauge(totals: Nutrients, cap: Double) -> some View {
+        let consumed = Double(totals.caloriesKcal)
+        let status = LimitsRule.dayStatus(SummaryBucket(dayTotals: totals), limits: limits)
+        let tint: Color = status == .red ? .red : .green
+        Gauge(value: min(consumed, cap), in: 0...cap) {
+            EmptyView()
+        } currentValueLabel: {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(totals.caloriesKcal)")
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                Text("/ \(Int(cap)) kcal")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if status == .red {
+                    Text("\(totals.caloriesKcal - Int(cap)) over")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .gaugeStyle(.linearCapacity)
+        .tint(tint)
+    }
+
+    /// No calorie cap set → calories as a plain headline plus a subtle
+    /// "Set a daily goal" button that opens the limits editor.
+    private func noGoalSummary(_ totals: Nutrients) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(totals.caloriesKcal)")
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                Text("kcal").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { showLimits = true } label: {
+                Label("Set a daily goal", systemImage: "target")
+                    .font(.footnote.weight(.medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
+        }
+    }
+
+    private func macroBreakdown(_ totals: Nutrients) -> some View {
+        HStack {
             stat(String(format: "%.0fg", totals.proteinG), "protein")
             stat(String(format: "%.0fg", totals.fatG), "fat")
             stat(String(format: "%.0fg", totals.carbsG), "carbs")
         }
+    }
+
+    /// Combined VoiceOver value, e.g. "1,450 of 2,000 kilocalories, within
+    /// goal" (or "…, over goal"), falling back to a plain total with no cap.
+    private func accessibilityValue(_ totals: Nutrients) -> String {
+        let kcal = totals.caloriesKcal.formatted() // locale grouping, e.g. "1,450"
+        if let cap = limits["calories_kcal"], cap > 0 {
+            let status = LimitsRule.dayStatus(SummaryBucket(dayTotals: totals), limits: limits)
+            let verdict = status == .red ? "over goal" : "within goal"
+            return "\(kcal) of \(Int(cap).formatted()) kilocalories, \(verdict)"
+        }
+        return "\(kcal) kilocalories, no daily goal set"
     }
 
     private func stat(_ value: String, _ name: String) -> some View {
@@ -321,6 +516,80 @@ struct DayView: View {
             Text(name).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Redacted stand-in for the goal card while a day is loading.
+    private var goalCardSkeleton: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Today").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("1450").font(.title2.weight(.semibold))
+                Text("/ 2000 kcal").font(.subheadline)
+            }
+            macroBreakdown(Nutrients(caloriesKcal: 0, proteinG: 90, fatG: 60, carbsG: 180,
+                                     fiberG: 0, sugarG: 0, sodiumMg: 0, saturatedFatG: 0,
+                                     ironMg: 0, calciumMg: 0, omega3G: 0))
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// Brief bottom toast confirming a Log-again landed on today while the
+    /// user is viewing another day. Auto-dismisses; `addedToTodayToken` drives
+    /// re-appearance on repeats.
+    @ViewBuilder
+    private var addedToTodayToast: some View {
+        if addedToTodayToken > 0 {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Added to today").font(.subheadline.weight(.medium))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(.green))
+            .shadow(radius: 4, y: 2)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .id(addedToTodayToken)
+            .task(id: addedToTodayToken) {
+                try? await Task.sleep(nanoseconds: 1_800_000_000)
+                withAnimation { addedToTodayToken = 0 }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    /// A neutral sample meal used only to give the loading skeleton realistic
+    /// row shape before redaction blurs the text.
+    private static let placeholderMeal: Meal = {
+        let json = """
+        {"meal_id":"placeholder","date":"","state":"logged","consumed_at":"",
+         "label":"Loading meal","source":"","calories_kcal":420,"protein_g":24,
+         "fat_g":18,"carbs_g":40,"fiber_g":0,"sugar_g":0,"sodium_mg":0,
+         "saturated_fat_g":0,"iron_mg":0,"calcium_mg":0,"omega3_g":0,
+         "nutrition_score":0,"diet_quality_score":0,"portion_factor":1.0}
+        """.data(using: .utf8)!
+        // Force-decode is safe: the literal above is a complete, valid Meal.
+        return try! JSONDecoder().decode(Meal.self, from: json)
+    }()
+}
+
+/// Memberwise-style construction for the goal card / accessibility value.
+/// SummaryBucket's only initializer is `init(from:)` (the synthesized
+/// memberwise init is suppressed because that init lives in the main
+/// declaration). Adding one in an extension restores direct construction
+/// WITHOUT touching MealService — letting DayView route through the SAME
+/// `LimitsRule.dayStatus` the calendar dots and Stats bars use, so the card's
+/// green/red tint stays consistent with them. meal_count is 1 (a non-empty
+/// day) — dayStatus treats mealCount == 0 as neutral.
+private extension SummaryBucket {
+    init(dayTotals: Nutrients) {
+        self.key = "day"
+        self.nutrients = dayTotals
+        self.nutritionScore = 0
+        self.dietQualityScore = 0
+        self.mealCount = 1 // non-empty day; dayStatus treats 0 as neutral
+        self.daysLogged = 1
     }
 }
 

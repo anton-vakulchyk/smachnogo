@@ -20,6 +20,10 @@ struct ScanResultView: View {
     @State private var refining: Set<Int> = []
     @State private var freeTextAnswer: [Int: String] = [:]
     @State private var lastTimeAnswers: [String: String] = [:] // lowercased label → past refinement answer
+    // Haptics (iOS 17 `.sensoryFeedback`): `selectionTick` bumps on any
+    // portion/variant chip tap; `savedTick` fires once the meal is saved.
+    @State private var selectionTick = 0
+    @State private var savedTick = 0
     // App Store health-app guideline: the AI-estimates disclaimer must be shown at the
     // first scan result (and lives permanently in Settings). Once seen, never again here.
     @AppStorage("hasSeenEstimateDisclaimer") private var hasSeenEstimateDisclaimer = false
@@ -76,6 +80,8 @@ struct ScanResultView: View {
             }
         }
         .onDisappear { hasSeenEstimateDisclaimer = true }
+        .sensoryFeedback(.selection, trigger: selectionTick)
+        .sensoryFeedback(.success, trigger: savedTick)
         .task {
             // "Same as last time": map past refined meals' labels to their
             // recorded answers (meals are the durable copy — scans TTL out).
@@ -145,14 +151,16 @@ struct ScanResultView: View {
             .buttonStyle(.plain)
 
             if selected.contains(i) {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Ate").font(.caption).foregroundStyle(.secondary)
-                    ForEach(Self.portionChoices, id: \.0) { (label, value) in
-                        Button(label) { portions[i] = value }
-                            .font(.caption.weight(abs(factor - value) < 0.01 ? .bold : .regular))
-                            .buttonStyle(.bordered)
-                            .tint(abs(factor - value) < 0.01 ? .accentColor : .secondary)
-                            .controlSize(.mini)
+                    WrapLayout(spacing: 8, lineSpacing: 8) {
+                        ForEach(Self.portionChoices, id: \.0) { (label, value) in
+                            let picked = abs(factor - value) < 0.01
+                            ChipButton(title: label, selected: picked) {
+                                portions[i] = value
+                                selectionTick &+= 1
+                            }
+                        }
                     }
                 }
 
@@ -253,22 +261,17 @@ struct ScanResultView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dish.clarificationQuestion.isEmpty ? "Which one is it?" : dish.clarificationQuestion)
                 .font(.footnote.weight(.medium))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(dish.variants.indices, id: \.self) { v in
-                        let picked = (selectedVariant[i] ?? 0) == v
-                        Button {
-                            selectedVariant[i] = v
-                        } label: {
-                            VStack(spacing: 1) {
-                                Text(dish.variants[v].label)
-                                Text("\(dish.variants[v].nutrients.caloriesKcal) kcal").font(.caption2)
-                            }
+            WrapLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(dish.variants.indices, id: \.self) { v in
+                    let picked = (selectedVariant[i] ?? 0) == v
+                    ChipButton(selected: picked) {
+                        selectedVariant[i] = v
+                        selectionTick &+= 1
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text(dish.variants[v].label)
+                            Text("\(dish.variants[v].nutrients.caloriesKcal) kcal").font(.caption2)
                         }
-                        .font(.caption.weight(picked ? .bold : .regular))
-                        .buttonStyle(.bordered)
-                        .tint(picked ? .accentColor : .secondary)
-                        .controlSize(.small)
                     }
                 }
             }
@@ -345,11 +348,104 @@ struct ScanResultView: View {
         Task {
             do {
                 let meals = try await ScanService().confirm(scanId: scanId, dishes: confirmDishes, date: day)
+                savedTick &+= 1
                 onSaved(meals)
             } catch {
                 saveError = error.localizedDescription
                 saving = false
             }
+        }
+    }
+}
+
+/// A selectable chip with a ≥44pt hit target (HIG), a filled/tinted selected
+/// state (not bold-only, so it survives reduced contrast), and an
+/// `.isSelected` accessibility trait so VoiceOver announces the active choice.
+/// Used for the portion and variant pickers.
+fileprivate struct ChipButton<Label: View>: View {
+    let selected: Bool
+    let action: () -> Void
+    @ViewBuilder let label: Label
+
+    init(selected: Bool, action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.selected = selected
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button(action: action) {
+            label.font(.subheadline.weight(selected ? .semibold : .regular))
+        }
+        .buttonStyle(ChipButtonStyle(selected: selected))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+extension ChipButton where Label == Text {
+    init(title: String, selected: Bool, action: @escaping () -> Void) {
+        self.init(selected: selected, action: action) { Text(title) }
+    }
+}
+
+/// Chip look: pill background, accent fill when selected, ≥44pt tall hit
+/// target, subtle press dim. Selection is conveyed by fill + tinted text/border
+/// so it doesn't rely on weight alone.
+fileprivate struct ChipButtonStyle: ButtonStyle {
+    let selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .foregroundStyle(selected ? Color.white : Color.accentColor)
+            .background(
+                Capsule().fill(selected ? Color.accentColor : Color.accentColor.opacity(0.12))
+            )
+            .overlay(
+                Capsule().strokeBorder(Color.accentColor.opacity(selected ? 0 : 0.4), lineWidth: 1)
+            )
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+/// Minimal flow layout (iOS 16+): lays children left-to-right and wraps to a
+/// new line when the row overflows, so chip rows grow taller at large Dynamic
+/// Type instead of clipping or needing a horizontal scroll.
+fileprivate struct WrapLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0 && x + s.width > maxWidth {
+                widest = max(widest, x - spacing)
+                y += rowHeight + lineSpacing
+                x = 0; rowHeight = 0
+            }
+            x += s.width + spacing
+            rowHeight = max(rowHeight, s.height)
+        }
+        widest = max(widest, x - spacing)
+        return CGSize(width: maxWidth.isFinite ? maxWidth : widest, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = bounds.width
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0 && x + s.width > maxWidth {
+                y += rowHeight + lineSpacing
+                x = 0; rowHeight = 0
+            }
+            v.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y), proposal: ProposedViewSize(s))
+            x += s.width + spacing
+            rowHeight = max(rowHeight, s.height)
         }
     }
 }
