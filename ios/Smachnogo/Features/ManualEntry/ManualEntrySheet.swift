@@ -14,6 +14,7 @@ struct ManualEntrySheet: View {
     @State private var errorText: String?
     @State private var recents: [Meal] = []
     @State private var reAddedLabel: String?
+    @State private var reAddHaptic = false
 
     private let service = MealService()
     @FocusState private var textFocused: Bool
@@ -72,11 +73,20 @@ struct ManualEntrySheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
         }
+        .sensoryFeedback(.success, trigger: reAddHaptic)
         .task { recents = (try? await service.recent()) ?? [] }
     }
 
     @ViewBuilder
     private func estimateSection(_ est: EstimateResponse) -> some View {
+        Section {
+            Button(role: .destructive) {
+                estimate = nil
+                errorText = nil
+            } label: {
+                Label("Start over", systemImage: "arrow.uturn.backward")
+            }
+        }
         if !est.isFood {
             Section {
                 Label("That doesn't sound like food — try describing the meal.", systemImage: "questionmark.circle")
@@ -169,6 +179,7 @@ struct ManualEntrySheet: View {
             do {
                 try await service.logAgainToday(meal)
                 reAddedLabel = meal.label
+                reAddHaptic.toggle()
                 onSaved()
                 try? await Task.sleep(for: .seconds(0.6))
                 dismiss()

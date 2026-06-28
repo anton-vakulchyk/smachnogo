@@ -12,6 +12,9 @@ struct SettingsView: View {
     @State private var exportURL: URL?
     @State private var exporting = false
     @State private var confirmDelete = false
+    /// Second gate, shown only for users WITHOUT Apple backup — they have no
+    /// recovery path, so a permanent wipe gets an extra "can't be undone" tap.
+    @State private var confirmDeleteFinal = false
     @State private var deleting = false
     @State private var deleted = false
     @State private var errorText: String?
@@ -34,6 +37,9 @@ struct SettingsView: View {
                         ShareLink(item: exportURL) {
                             Label("Share exported data", systemImage: "square.and.arrow.up")
                         }
+                        Text("Ready — tap to share.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     } else {
                         Button {
                             exportData()
@@ -50,19 +56,24 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    if StoreService.shared.me?.appleLinked == true {
+                    if appleLinked {
+                        // Already backed up: show status, not a big sign-in
+                        // button (which reads as "backup failed, try again").
                         Label("Backed up with your Apple ID", systemImage: "checkmark.icloud")
                             .foregroundStyle(.secondary)
-                    }
-                    if appleBusy {
+                        if appleBusy {
+                            ProgressView()
+                        } else {
+                            // Quiet secondary action: re-running Apple sign-in
+                            // pulls this account's diary onto the current
+                            // device (server returns "recovered" if it lives
+                            // elsewhere). Useful after a reinstall.
+                            Button("Restore on this device") { startAppleSignIn() }
+                        }
+                    } else if appleBusy {
                         ProgressView()
                     } else {
-                        AppleSignInButton {
-                            rawNonce = UUID().uuidString + UUID().uuidString
-                            signInRunner.run(nonceHash: AppleLinkService.sha256Hex(rawNonce)) { result in
-                                handleApple(result)
-                            }
-                        }
+                        AppleSignInButton { startAppleSignIn() }
                         .frame(height: 48)
                         // Inset past the section card's corner clip (iOS 26
                         // Forms clip rows to a large-radius card — anything
@@ -78,7 +89,9 @@ struct SettingsView: View {
                 } header: {
                     Text("Back up & restore")
                 } footer: {
-                    Text("Link your Apple ID to restore your diary and subscription on a new iPhone. Without it, your data lives only on this device.")
+                    Text(appleLinked
+                         ? "Your diary and subscription are linked to your Apple ID. Sign in with the same Apple ID on a new iPhone to restore everything."
+                         : "Continue with Apple to back this account up AND restore it on another iPhone — sign in with the same Apple ID anywhere. Without it, your data lives only on this device.")
                 }
 
                 Section("Subscription") {
@@ -142,9 +155,22 @@ struct SettingsView: View {
                 isPresented: $confirmDelete,
                 titleVisibility: .visible
             ) {
-                Button("Delete everything", role: .destructive) { deleteAccount() }
+                Button("Delete everything", role: .destructive) {
+                    // Backed-up users can restore by signing in again, so one
+                    // tap is enough. Everyone else gets a second gate.
+                    if appleLinked { deleteAccount() } else { confirmDeleteFinal = true }
+                }
             } message: {
                 Text("All meals and photos are permanently removed. An active subscription is NOT cancelled here — manage it in your Apple ID settings.")
+            }
+            .confirmationDialog(
+                "This can't be undone",
+                isPresented: $confirmDeleteFinal,
+                titleVisibility: .visible
+            ) {
+                Button("Delete permanently", role: .destructive) { deleteAccount() }
+            } message: {
+                Text("Your account isn't backed up with an Apple ID, so this can't be recovered. Every meal and photo will be gone for good.")
             }
             .alert("Account deleted", isPresented: $deleted) {
                 Button("OK") { dismiss() }
@@ -154,9 +180,20 @@ struct SettingsView: View {
         }
     }
 
+    private var appleLinked: Bool {
+        StoreService.shared.me?.appleLinked == true
+    }
+
     private var limitsSummary: String {
         let n = (StoreService.shared.me?.limits ?? [:]).count
         return n == 0 ? "None set" : "\(n) set"
+    }
+
+    private func startAppleSignIn() {
+        rawNonce = UUID().uuidString + UUID().uuidString
+        signInRunner.run(nonceHash: AppleLinkService.sha256Hex(rawNonce)) { result in
+            handleApple(result)
+        }
     }
 
     fileprivate func handleApple(_ result: Result<ASAuthorization, Error>) {

@@ -34,6 +34,9 @@ struct DayView: View {
     /// while another day is on screen (the action's result is otherwise
     /// off-screen, so there'd be no confirmation).
     @State private var addedToTodayToken = 0
+    /// Meal waiting for swipe-to-delete confirmation. Set by the trailing
+    /// swipe action; cleared on confirm (deletes) or cancel.
+    @State private var mealPendingDelete: Meal?
 
     /// One per haptic kind; `id` changes every fire so repeats re-trigger.
     private struct DiaryFeedback: Equatable {
@@ -222,6 +225,28 @@ struct DayView: View {
             // A failed pull-to-refresh on a populated day was silent (stale
             // data shown with no signal). Surface it inline.
             .overlay(alignment: .top) { errorBanner }
+            .confirmationDialog(
+                "Delete this meal?",
+                isPresented: Binding(
+                    get: { mealPendingDelete != nil },
+                    set: { if !$0 { mealPendingDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    guard let meal = mealPendingDelete else { return }
+                    mealPendingDelete = nil
+                    Task {
+                        do {
+                            try await mealService.delete(mealId: meal.mealId, date: meal.date)
+                            fire(.warning)
+                            await load()
+                        } catch {
+                            loadError = error.localizedDescription
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -289,6 +314,13 @@ struct DayView: View {
                 Label("Log again", systemImage: "arrow.counterclockwise")
             }
             .tint(.green)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                mealPendingDelete = meal
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 
