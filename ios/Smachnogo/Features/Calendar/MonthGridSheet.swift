@@ -19,6 +19,7 @@ struct MonthGridSheet: View {
                 monthHeader
                 weekdayHeader
                 grid
+                legend
                 Spacer()
             }
             .padding()
@@ -55,6 +56,46 @@ struct MonthGridSheet: View {
         }
     }
 
+    /// Tiny key for the day markers. When limits are set the dots take a
+    /// within/over verdict (shape + color); otherwise a plain dot just marks
+    /// a logged day. Spelled out so the marks aren't a mystery.
+    @ViewBuilder
+    private var legend: some View {
+        Group {
+            if limits.isEmpty {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                    Text("Day with a logged meal")
+                    Text("· Set limits in Settings to color days")
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    legendItem(systemImage: "checkmark.circle.fill", color: .green, text: "Within limits")
+                    legendItem(systemImage: "exclamationmark.circle.fill", color: .red, text: "Over a limit")
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                        Text("Logged")
+                    }
+                }
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(limits.isEmpty
+            ? "Legend: a dot marks a day with a logged meal. Set limits in Settings to color days within or over your limits."
+            : "Legend: a check means a logged day within your limits, an exclamation mark means a day over a limit, and a plain dot means a logged day.")
+    }
+
+    private func legendItem(systemImage: String, color: Color, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage).foregroundStyle(color)
+            Text(text)
+        }
+    }
+
     private var grid: some View {
         let days = monthDays()
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
@@ -73,6 +114,8 @@ struct MonthGridSheet: View {
         let key = DateUtil.dayString(day)
         let isSelected = cal.isDate(day, inSameDayAs: selectedDate)
         let isToday = cal.isDateInToday(day)
+        let logged = dayBuckets[key] != nil
+        let status = dayStatus(key)
         Button {
             selectedDate = day
             dismiss()
@@ -81,24 +124,54 @@ struct MonthGridSheet: View {
                 Text("\(cal.component(.day, from: day))")
                     .font(.callout.weight(isToday ? .bold : .regular))
                     .foregroundStyle(isSelected ? Color.white : (isToday ? Color.accentColor : .primary))
-                Circle()
-                    .fill(dotColor(key))
-                    .frame(width: 5, height: 5)
+                dayMarker(logged: logged, status: status)
             }
             .frame(maxWidth: .infinity, minHeight: 40)
             .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dayAccessibilityLabel(day, logged: logged, status: status))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
-    /// No log → no dot. Logged → accent, or green/red against the user's
-    /// limits (M9: pure client-side mapping over the same day buckets).
-    private func dotColor(_ key: String) -> Color {
-        guard let bucket = dayBuckets[key] else { return .clear }
-        switch LimitsRule.dayStatus(bucket, limits: limits) {
-        case .green: return .green
-        case .red: return .red
-        case .neutral: return .accentColor
+    /// Logged-day marker. Symbol-coded (not hue alone) when limits color the
+    /// day: a check for within-limits, an alert glyph for over. A plain dot
+    /// marks a logged day with no limits set. Slightly larger than before for
+    /// visibility. Empty (clear) when nothing was logged.
+    @ViewBuilder
+    private func dayMarker(logged: Bool, status: LimitsRule.Status) -> some View {
+        switch status {
+        case .green:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(.green)
+        case .red:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(.red)
+        case .neutral:
+            Circle()
+                .fill(logged ? Color.accentColor : Color.clear)
+                .frame(width: 7, height: 7)
+        }
+    }
+
+    /// No log → neutral (no dot). Logged → neutral (accent) unless the user's
+    /// limits color it green/red (M9: client-side over the same day buckets).
+    private func dayStatus(_ key: String) -> LimitsRule.Status {
+        guard let bucket = dayBuckets[key] else { return .neutral }
+        return LimitsRule.dayStatus(bucket, limits: limits)
+    }
+
+    /// VoiceOver sentence for a day cell, e.g. "June 12, logged, within limits".
+    private func dayAccessibilityLabel(_ day: Date, logged: Bool, status: LimitsRule.Status) -> String {
+        let date = day.formatted(.dateTime.month(.wide).day())
+        guard logged else { return "\(date), not logged" }
+        switch status {
+        case .green: return "\(date), logged, within limits"
+        case .red: return "\(date), logged, over a limit"
+        case .neutral: return "\(date), logged"
         }
     }
 

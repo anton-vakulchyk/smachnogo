@@ -83,9 +83,14 @@ struct StatsView: View {
             HStack(spacing: 6) {
                 Text(periodTitle).font(.headline)
                 if granularity != .day, periodLimitStatus != .neutral {
-                    Circle()
-                        .fill(periodLimitStatus == .green ? Color.green : Color.red)
-                        .frame(width: 8, height: 8)
+                    // Shape + color (Differentiate Without Color): a distinct
+                    // glyph per verdict instead of a hue-only dot.
+                    Image(systemName: periodLimitStatus == .green
+                          ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(periodLimitStatus == .green ? Color.green : Color.red)
+                        .accessibilityLabel(periodLimitStatus == .green
+                                            ? "Within limits this period" : "Over a limit this period")
                 }
             }
             Spacer()
@@ -216,15 +221,17 @@ struct StatsView: View {
 
     private func scoresCard(_ r: SummaryResult) -> some View {
         card("Quality") {
-            HStack(spacing: 24) {
-                scoreRing("Nutrition", r.totals.nutritionScore)
-                scoreRing("Diet quality", r.totals.dietQualityScore)
+            HStack(alignment: .top, spacing: 24) {
+                scoreRing("Nutrition", r.totals.nutritionScore,
+                          caption: "How balanced the day's nutrients are")
+                scoreRing("Diet quality", r.totals.dietQualityScore,
+                          caption: "Whole, minimally-processed foods")
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    private func scoreRing(_ name: String, _ score: Int) -> some View {
+    private func scoreRing(_ name: String, _ score: Int, caption: String) -> some View {
         VStack(spacing: 6) {
             ZStack {
                 Circle().stroke(.quaternary, lineWidth: 7)
@@ -235,12 +242,39 @@ struct StatsView: View {
                 Text("\(score)").font(.headline)
             }
             .frame(width: 64, height: 64)
-            Text(name).font(.caption).foregroundStyle(.secondary)
+            // Non-color status cue (Differentiate Without Color): a shaped
+            // SF Symbol alongside the label, so the ring's verdict reads
+            // without relying on hue.
+            HStack(spacing: 4) {
+                Image(systemName: scoreSymbol(score))
+                    .font(.caption2)
+                    .foregroundStyle(scoreColor(score))
+                    .accessibilityHidden(true)
+                Text(name).font(.caption).foregroundStyle(.secondary)
+            }
+            Text(caption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name) score")
+        .accessibilityValue("\(score) of 100, \(scoreWord(score)). \(caption).")
     }
 
     private func scoreColor(_ s: Int) -> Color {
         s >= 70 ? .green : (s >= 45 ? .orange : .red)
+    }
+
+    /// Shape-based cue mirroring scoreColor's bands (good / fair / low).
+    private func scoreSymbol(_ s: Int) -> String {
+        s >= 70 ? "checkmark.circle.fill" : (s >= 45 ? "minus.circle.fill" : "exclamationmark.circle.fill")
+    }
+
+    private func scoreWord(_ s: Int) -> String {
+        s >= 70 ? "good" : (s >= 45 ? "fair" : "low")
     }
 
     /// The 7 curated micros vs daily reference, as low/ok/high bands on the
@@ -263,11 +297,22 @@ struct StatsView: View {
                             .frame(maxHeight: .infinity)
                         }
                         .frame(height: 14)
+                        .accessibilityHidden(true)
+                        // Band as a shaped SF Symbol so low/ok/high reads
+                        // without relying on the bar's hue alone.
+                        Image(systemName: bandSymbol(band))
+                            .font(.caption2)
+                            .foregroundStyle(band.color)
+                            .frame(width: 14)
+                            .accessibilityHidden(true)
                         Text(valueLabel(perDay, spec))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(width: 92, alignment: .trailing)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(spec.name)
+                    .accessibilityValue(bandAccessibilityValue(perDay, spec, band))
                 }
                 Text("General adult reference values · AI estimates, not medical advice")
                     .font(.caption2)
@@ -282,6 +327,30 @@ struct StatsView: View {
         let val = v < 10 ? String(format: "%.1f", v) : String(format: "%.0f", v)
         let dv = spec.dv < 10 ? String(format: "%.1f", spec.dv) : String(format: "%.0f", spec.dv)
         return "\(val)/\(dv)\(spec.unit)"
+    }
+
+    /// Shape cue for the low/ok/high band, mirroring NutrientDV.Band.color.
+    private func bandSymbol(_ band: NutrientDV.Band) -> String {
+        switch band {
+        case .ok: return "checkmark.circle.fill"
+        case .low: return "arrow.down.circle.fill"   // below a "more is better" target
+        case .high: return "arrow.up.circle.fill"    // over a "less is better" ceiling
+        }
+    }
+
+    /// Spoken value, e.g. "12 of 28 grams, below reference" — direction-aware
+    /// so the verdict makes sense for both targets and ceilings.
+    private func bandAccessibilityValue(_ v: Double, _ spec: NutrientDV.Spec, _ band: NutrientDV.Band) -> String {
+        let val = v < 10 ? String(format: "%.1f", v) : String(format: "%.0f", v)
+        let dv = spec.dv < 10 ? String(format: "%.1f", spec.dv) : String(format: "%.0f", spec.dv)
+        let unit = spec.unit == "g" ? "grams" : "milligrams"
+        let verdict: String
+        switch band {
+        case .ok: return "\(val) of \(dv) \(unit), within reference"
+        case .low: verdict = "below reference"
+        case .high: verdict = "over reference"
+        }
+        return "\(val) of \(dv) \(unit), \(verdict)"
     }
 
     private func stat(_ value: String, _ name: String) -> some View {

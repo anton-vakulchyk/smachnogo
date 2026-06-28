@@ -9,6 +9,9 @@ struct ScanResultView: View {
     let analysis: PhotoAnalysis
     let image: UIImage
     let onSaved: ([Meal]) -> Void
+    /// Abandon this result and reopen the camera for a fresh photo. Wired by
+    /// ScanFlowView (which owns the scan lifecycle + camera presentation).
+    let onRetake: () -> Void
 
     @State private var dishes: [Dish] // refined dishes replace entries in place
     @State private var selected: Set<Int>
@@ -24,6 +27,8 @@ struct ScanResultView: View {
     // portion/variant chip tap; `savedTick` fires once the meal is saved.
     @State private var selectionTick = 0
     @State private var savedTick = 0
+    // Light tap when the user taps "Retake photo" on the quality warning.
+    @State private var retakeTick = 0
     // App Store health-app guideline: the AI-estimates disclaimer must be shown at the
     // first scan result (and lives permanently in Settings). Once seen, never again here.
     @AppStorage("hasSeenEstimateDisclaimer") private var hasSeenEstimateDisclaimer = false
@@ -32,11 +37,12 @@ struct ScanResultView: View {
         ("¼", 0.25), ("⅓", 1.0 / 3.0), ("½", 0.5), ("¾", 0.75), ("1", 1.0), ("1½", 1.5), ("2", 2.0),
     ]
 
-    init(scanId: String, analysis: PhotoAnalysis, image: UIImage, suggestedDate: Date? = nil, onSaved: @escaping ([Meal]) -> Void) {
+    init(scanId: String, analysis: PhotoAnalysis, image: UIImage, suggestedDate: Date? = nil, onSaved: @escaping ([Meal]) -> Void, onRetake: @escaping () -> Void = {}) {
         self.scanId = scanId
         self.analysis = analysis
         self.image = image
         self.onSaved = onSaved
+        self.onRetake = onRetake
         _dishes = State(initialValue: analysis.dishes)
         _selected = State(initialValue: Set(analysis.dishes.indices))
         _date = State(initialValue: suggestedDate ?? Date())
@@ -49,6 +55,13 @@ struct ScanResultView: View {
                     Label(retakeHint, systemImage: "camera.badge.ellipsis")
                         .font(.footnote)
                         .foregroundStyle(.orange)
+                    Button {
+                        retakeTick &+= 1
+                        onRetake()
+                    } label: {
+                        Label("Retake photo", systemImage: "camera.rotate")
+                            .font(.subheadline.weight(.medium))
+                    }
                 }
             }
 
@@ -82,6 +95,7 @@ struct ScanResultView: View {
         .onDisappear { hasSeenEstimateDisclaimer = true }
         .sensoryFeedback(.selection, trigger: selectionTick)
         .sensoryFeedback(.success, trigger: savedTick)
+        .sensoryFeedback(.impact(weight: .light), trigger: retakeTick)
         .task {
             // "Same as last time": map past refined meals' labels to their
             // recorded answers (meals are the durable copy — scans TTL out).

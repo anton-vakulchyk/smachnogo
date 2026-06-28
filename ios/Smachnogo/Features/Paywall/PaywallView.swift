@@ -17,6 +17,10 @@ struct PaywallView: View {
     @State private var selectedID: String?
     /// Flips on a verified purchase to fire the success haptic.
     @State private var purchaseSucceeded = false
+    /// Restore ran and turned up nothing — without explicit feedback the
+    /// sheet just sits there and reads as broken.
+    @State private var showNothingToRestore = false
+    @State private var restoring = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -47,13 +51,30 @@ struct PaywallView: View {
                             .multilineTextAlignment(.center).padding(.horizontal)
                     }
 
-                    Button("Restore Purchases") {
+                    Button {
                         Task {
+                            restoring = true
+                            errorMessage = nil
                             await store.restore()
-                            if store.isSubscribed { dismiss() }
+                            restoring = false
+                            // restore() updates isSubscribed in place; a still-
+                            // false result means there was nothing to restore.
+                            if store.isSubscribed {
+                                purchaseSucceeded.toggle() // success haptic
+                                dismiss()
+                            } else {
+                                showNothingToRestore = true
+                            }
+                        }
+                    } label: {
+                        if restoring {
+                            ProgressView()
+                        } else {
+                            Text("Restore Purchases")
                         }
                     }
                     .font(.subheadline)
+                    .disabled(restoring)
 
                     Text("The text diary stays free forever — describe meals, edit history, see stats.")
                         .font(.footnote)
@@ -72,6 +93,11 @@ struct PaywallView: View {
                 }
             }
             .sensoryFeedback(.success, trigger: purchaseSucceeded)
+            .alert("No purchases found to restore", isPresented: $showNothingToRestore) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("There's no active subscription on this Apple ID. If you subscribed with a different Apple ID, sign in with that one and try again.")
+            }
             .onChange(of: store.products.map(\.id)) { _, _ in selectDefault() }
             .onAppear { selectDefault() }
         }
